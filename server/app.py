@@ -296,6 +296,25 @@ def whisper():
     return _whisper or None
 
 
+def decode_capped(data, max_seconds):
+    """Decode to 16 kHz mono float32, giving up (None) as soon as it runs past max_seconds.
+    Stops early instead of decoding everything first: a tiny compressed file can hold hours of audio."""
+    import av
+    import numpy as np
+    limit, chunks, n = max_seconds * 16000, [], 0
+    with av.open(io.BytesIO(data)) as container:
+        resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+        frames = (f for fr in container.decode(audio=0) for f in resampler.resample(fr))
+        for f in frames:
+            a = f.to_ndarray().reshape(-1)
+            n += len(a)
+            if n > limit:
+                return None
+            chunks.append(a)
+        chunks += [f.to_ndarray().reshape(-1) for f in resampler.resample(None)]  # flush the tail
+    return (np.concatenate(chunks).astype(np.float32) / 32768.0) if chunks else np.zeros(0, np.float32)
+
+
 @app.post("/api/stt")
 def stt():
     w = whisper()
@@ -305,9 +324,8 @@ def stt():
     if not audio:
         return jsonify(error="bad audio"), 400
     try:
-        from faster_whisper import decode_audio
-        samples = decode_audio(io.BytesIO(audio))  # 16 kHz mono
-        if len(samples) > MAX_AUDIO_SECONDS * 16000:
+        samples = decode_capped(audio, MAX_AUDIO_SECONDS)
+        if samples is None:
             return jsonify(error="too long"), 400
         segments, _ = w.transcribe(samples, language="en", beam_size=1, vad_filter=True,
                                    initial_prompt="Hello Puffy Pal!")  # primes the toy's name

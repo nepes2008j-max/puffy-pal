@@ -75,5 +75,14 @@ if health.get("stt") == "whisper" and audio[:4] == b"RIFF":
     heard = json.load(urllib.request.urlopen(req, timeout=60))["text"]
     print(f"stt: {time.time() - t:.2f}s -> {heard!r}")
     assert "connected" in heard.lower(), "whisper should hear the sentence"
+    # 60s of silence as Opus is tiny on the wire but must be refused (decoder stops at 20s)
+    long_webm = subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono",
+                                "-t", "60", "-c:a", "libopus", "-f", "webm", "-"], capture_output=True, check=True).stdout
+    try:
+        urllib.request.urlopen(urllib.request.Request(BASE + "/api/stt", long_webm, {"Content-Type": "audio/webm"}))
+        raise AssertionError("60s audio was accepted")
+    except urllib.error.HTTPError as e:
+        assert e.code == 400, e.code
+    print(f"stt: 60s upload ({len(long_webm)} bytes) refused")
 assert slow == 0, f"{slow} replies took over 3s"
 print("OK")
