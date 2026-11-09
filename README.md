@@ -6,7 +6,8 @@ An AI monkey friend that helps children aged 4–12 practise English by talking.
 docs/index.html   web app (GitHub Pages serves this folder)
 docs/monkey.png   toy image exported from Figma
 server/app.py     backend: /api/chat (LLM), /api/tts (Kokoro voice), /api/health
-server/check.py   smoke test: speed, clean output, safety
+server/check.py   server test: speed, clean output, safety, security
+server/e2e.mjs    browser test: real page + fake microphone, every main flow
 ```
 
 ## Run on the laptop (fastest: RTX 4060 + toy-brain + Kokoro)
@@ -15,7 +16,8 @@ server/check.py   smoke test: speed, clean output, safety
 ./start.sh            # starts the AI server and opens the live site (it talks to this laptop)
 ./start.sh local      # same, but opens http://localhost:5000
 ./start.sh public     # public https link for phones / other networks (Cloudflare quick tunnel)
-python3 server/check.py   # speed + safety + voice round-trip test
+python3 server/check.py   # server: speed + safety + security + voice round trip
+node server/e2e.mjs       # the real page in headless Chrome with a fake mic (12 user flows)
 ```
 
 While the laptop runs the server, https://nepes2008j-max.github.io/puffy-pal/ talks on this laptop.

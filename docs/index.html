@@ -380,9 +380,11 @@ $('reminderForm').onsubmit = e => {
   $('remText').value = '';
 };
 setInterval(() => {
-  const now = new Date(), hm = now.toTimeString().slice(0, 5), today = dayKey(now);
+  const now = new Date(), today = dayKey(now), mins = now.getHours() * 60 + now.getMinutes();
   for (const r of S.reminders) {
-    if (r.time === hm && r.last !== today) {
+    const [h, m] = r.time.split(':').map(Number), late = mins - (h * 60 + m);
+    // up to 5 min late still counts: background tabs only run timers about once a minute
+    if (late >= 0 && late <= 5 && r.last !== today) {
       r.last = today; save();
       const text = S.child.name && !r.text.includes(S.child.name) ? `${S.child.name}, ${r.text}` : r.text;
       toast('⏰ ' + text);
@@ -582,16 +584,20 @@ async function recordForWhisper() {
     if (!heard) { mood('', "I didn't hear you. Tap and try again!"); return; }
     talk({audio: new Blob(chunks, {type: r.mimeType})});
   };
-  (function watch() { // stop by itself when the child finishes talking
-    if (!recorder || recorder.state !== 'recording') return;
+  recorder.start(); $('mic').classList.add('live'); mood('', "I'm listening… talk now!");
+  ctx.resume?.(); // some browsers start audio contexts paused; a paused analyser hears only silence
+  // Stop by itself when the child finishes talking. A timer, not requestAnimationFrame: rAF pauses
+  // when the screen isn't drawing (locked phone, background tab), which would leave the mic on forever.
+  const rec_ = recorder, watch = setInterval(() => {
+    if (rec_.state !== 'recording') return clearInterval(watch);
     an.getByteTimeDomainData(buf);
     let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
     const now = performance.now();
     if (peak > LOUD) { heard = true; quietSince = now; }
-    if ((heard && now - quietSince > SILENCE_MS) || now - start > 15000 || (!heard && now - start > 7000)) return recorder.stop();
-    requestAnimationFrame(watch);
-  })();
-  recorder.start(); $('mic').classList.add('live'); mood('', "I'm listening… talk now!");
+    if ((heard && now - quietSince > SILENCE_MS) || now - start > 15000 || (!heard && now - start > 7000)) {
+      clearInterval(watch); rec_.stop();
+    }
+  }, 50);
 }
 function recordWithBrowser() {
   if (!SR) { $('text').focus(); mood('', 'Voice works in Chrome or Edge — please type here'); return; }
