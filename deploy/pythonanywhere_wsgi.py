@@ -17,7 +17,11 @@ os.environ["REASONING_EFFORT"] = "none"
 # Ears: Groq's cloud Whisper (same key). Voice: the phone's own voice (no GPU here for Kokoro).
 os.environ["STT_URL"] = "https://api.groq.com/openai/v1/audio/transcriptions"
 
-# Only this site may use the API.
+# Optional access code: uncomment, pick any word, and type the same word once in the app's
+# Settings -> Connection -> Access code. Stops strangers who find the address from using your Groq quota.
+# os.environ["APP_TOKEN"] = "pick-a-secret-word"
+
+# Only this site may use the API (plus a per-visitor limit of 40 AI requests a minute, built in).
 os.environ["ALLOWED_HOSTS"] = f"{USERNAME}.pythonanywhere.com"
 os.environ["ALLOWED_ORIGINS"] = f"https://{USERNAME}.pythonanywhere.com,https://nepes2008j-max.github.io"
 

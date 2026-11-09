@@ -8,9 +8,11 @@ import io
 import json
 import os
 import re
+import time
 import urllib.request
 import uuid
 import wave
+from collections import defaultdict, deque
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -163,6 +165,27 @@ def cors(resp):
     return resp
 
 
+# ponytail: in-memory per-IP limit, fine for one server process; use Redis or the host's limiter if it ever scales out.
+RATE_PER_MIN = int(os.environ.get("RATE_LIMIT_PER_MIN", "40"))  # a chatting child uses well under 10
+LIMITED = {"/api/chat", "/api/talk", "/api/stt", "/api/tts"}
+_hits = defaultdict(deque)
+
+
+def client_ip():
+    # Cloudflare (tunnel) and PythonAnywhere's proxy set these; both overwrite any value a client sends.
+    return request.headers.get("CF-Connecting-IP") or request.headers.get("X-Real-IP") or request.remote_addr or "?"
+
+
+def too_many(ip):
+    now, q = time.monotonic(), _hits[ip]
+    while q and now - q[0] > 60:
+        q.popleft()
+    if len(q) >= RATE_PER_MIN:
+        return True
+    q.append(now)
+    return False
+
+
 @app.before_request
 def guard():
     if not host_ok():
@@ -172,6 +195,8 @@ def guard():
     origin = request.headers.get("Origin")
     if origin and not origin_ok(origin) and request.path.startswith("/api/"):
         return jsonify(error="origin not allowed"), 403  # browsers send Origin; curl/scripts on this machine don't
+    if request.path in LIMITED and too_many(client_ip()):
+        return jsonify(error="slow down"), 429
     if request.path.startswith("/api/") and request.path != "/api/health" and APP_TOKEN \
             and request.headers.get("X-App-Token") != APP_TOKEN:
         return jsonify(error="bad access code"), 401
