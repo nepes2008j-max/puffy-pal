@@ -24,7 +24,7 @@ While the laptop runs the server, https://nepes2008j-max.github.io/puffy-pal/ ta
 Speech: local Whisper (mic) → toy-brain (streamed) → Kokoro on the GPU, about 1 s from the child to the first sound.
 See [PLAN.md](PLAN.md) for what's done and what's next.
 
-Without Whisper on the server (e.g. PythonAnywhere), the browser's own speech recognition is used (Chrome/Edge).
+Servers without a GPU (e.g. PythonAnywhere) use Groq's cloud Whisper when STT_URL is set, otherwise the browser's own speech recognition.
 
 ## Put it online 24/7
 
