@@ -20,7 +20,7 @@ const PORT = 9333 + Math.floor(Math.random() * 500);
 const chrome = spawn('google-chrome', [
   '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${DIR}/profile`,
   '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream',
-  `--use-file-for-fake-audio-capture=${DIR}/mic.wav`, '--autoplay-policy=no-user-gesture-required',
+  `--use-file-for-fake-audio-capture=${DIR}/mic.wav`, // autoplay rules left ON, like a phone
   '--no-proxy-server', '--no-first-run', '--window-size=430,900', 'about:blank'], { stdio: 'ignore' });
 
 let target;
@@ -57,10 +57,20 @@ await cdp('Runtime.enable'); await cdp('Network.enable'); await cdp('Page.enable
 await cdp('Page.addScriptToEvaluateOnNewDocument', { source: `
   window.__plays = [];
   const op = HTMLMediaElement.prototype.play;
-  HTMLMediaElement.prototype.play = function () { __plays.push({t: performance.now(), kind: 'kokoro'}); return op.call(this); };
-  speechSynthesis.speak = u => { __plays.push({t: performance.now(), kind: 'browser'}); setTimeout(() => u.onend && u.onend(), 300); };
+  HTMLMediaElement.prototype.play = function () {
+    if (this.src.startsWith('data:')) return op.call(this); // the silent unlock clip
+    const e = {t: performance.now(), kind: 'kokoro', ok: null}; __plays.push(e);
+    const p = op.call(this); p.then(() => e.ok = true, err => e.ok = (err && (err.name + ': ' + err.message)) || String(err)); return p; };
+  speechSynthesis.speak = u => { if (!u.text.trim()) return; // blank = the audio-unlock utterance
+    __plays.push({t: performance.now(), kind: 'browser', ok: true}); setTimeout(() => u.onend && u.onend(), 300); };
 ` });
 
+const tap = async sel => { // a real finger tap (trusted input), not element.click()
+  const r = await js(`const b=document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return {x:b.x+b.width/2, y:b.y+b.height/2}`);
+  for (const type of ['mousePressed', 'mouseReleased'])
+    await cdp('Input.dispatchMouseEvent', { type, x: r.x, y: r.y, button: 'left', clickCount: 1 });
+};
+const blocked = async from => { const b = await js(`return __plays.slice(${from}).filter(p=>p.ok!==true && p.ok!==null).map(p=>p.ok)`); if (b.length) throw new Error('audio BLOCKED by browser: ' + b.join(',')); };
 const results = [];
 const step = async (name, fn) => {
   try { results.push(['PASS', name, await fn()]); } catch (e) { results.push(['FAIL', name, e.message.split('\n')[0]]); }
@@ -86,17 +96,19 @@ await step('server status (health)', async () => {
   return `brain=${s.model} voice=${s.voice} ears=${s.stt}`;
 });
 await step('greeting is spoken on Talk screen', async () => {
-  await js(`go('talk')`);
-  const secs = await waitFor(`__plays.length>=1`, 8000, 'greeting audio');
+  await tap('#home [data-go="talk"]');
+  const secs = await waitFor(`__plays.length>=1 && __plays[0].ok!==null`, 8000, 'greeting audio');
+  await blocked(0);
   await waitFor(idleNow, 15000, 'greeting to finish');
   return `voice started after ${secs.toFixed(2)}s (${await js('return __plays[0].kind')})`;
 });
 await step('SPOKEN question: real mic -> silence stop -> Whisper -> reply -> voice', async () => {
   const before = await js(`return __plays.length`);
-  const t0 = await js(`window.__trace=[]; const iv=setInterval(()=>{const st=$('state').textContent+' | rec='+(recorder?recorder.state:'none')+' | busy='+busy; if(__trace.at(-1)?.s!==st) __trace.push({t:Math.round(performance.now()), s:st})},100); window.__iv=iv; $('mic').click(); return performance.now()`);
+  const t0 = await js(`window.__trace=[]; const iv=setInterval(()=>{const st=$('state').textContent+' | rec='+(recorder?recorder.state:'none')+' | busy='+busy; if(__trace.at(-1)?.s!==st) __trace.push({t:Math.round(performance.now()), s:st})},100); window.__iv=iv; return performance.now()`); await tap('#mic');
   try { await waitFor(`document.querySelectorAll('.msg.user').length>=1`, 15000, 'heard bubble'); }
   catch (e) { throw new Error(e.message + ' TRACE: ' + JSON.stringify(await js(`return __trace.map(x=>Math.round(x.t-${t0})+'ms '+x.s)`))); }
-  await waitFor(`__plays.length>${before}`, 15000, 'reply audio');
+  await waitFor(`__plays.length>${before} && __plays[${before}].ok!==null`, 15000, 'reply audio');
+  await blocked(before);
   const r = await js(`return {heard: document.querySelector('.msg.user').textContent, firstPlay: __plays[${before}].t, kind: __plays[${before}].kind}`);
   await waitFor(idleNow, 30000, 'reply to finish');
   const afterSpeech = (r.firstPlay - t0) / 1000 - SPEECH_END;
@@ -104,8 +116,9 @@ await step('SPOKEN question: real mic -> silence stop -> Whisper -> reply -> voi
 });
 await step('TYPED question -> streamed reply -> voice', async () => {
   const before = await js(`return __plays.length`);
-  const t0 = await js(`send('What color is the sky?'); return performance.now()`);
-  await waitFor(`__plays.length>${before}`, 15000, 'reply audio');
+  const t0 = await js(`$('text').value='What color is the sky?'; return performance.now()`); await tap('.send');
+  await waitFor(`__plays.length>${before} && __plays[${before}].ok!==null`, 15000, 'reply audio');
+  await blocked(before);
   const first = await js(`return __plays[${before}].t`);
   await waitFor(idleNow, 30000, 'reply to finish');
   return `"${await js(lastReply)}" | first sound ${((first - t0) / 1000).toFixed(2)}s after sending`;

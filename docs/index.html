@@ -540,7 +540,30 @@ function browserSpeak(text) {
   });
 }
 const ttsUrl = t => call('/api/tts', {text: t, speed: S.speed}).then(r => r.ok ? r.blob() : null).then(b => b && URL.createObjectURL(b)).catch(() => null);
-const play = url => new Promise(res => { audio = new Audio(url); audio.volume = S.volume; audio.onended = audio.onerror = res; audio.play().catch(res); });
+// One audio player for everything, "unlocked" by the child's first tap. iPhones only allow sound that a
+// tap started, but a player that played once from a tap may keep playing later replies.
+const voice = new Audio(); voice.preload = 'auto';
+const SILENT_MP3 = 'data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAAAAAAAAAAAAAA//NExAAAAANIAAAAAExBTUUzLjEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExFMAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKYAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKwAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVTEFNRTMu//NExKwAAANIAAAAADEwMFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NExKwAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV//NExKwAAANIAAAAAFVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVVV';
+let unlocked = false, pendingUrl = null;
+function unlockAudio() {
+  if (unlocked) return;
+  unlocked = true;
+  voice.src = SILENT_MP3; voice.play().catch(() => {});
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance(' ')); } catch {}
+}
+['pointerdown', 'touchend', 'keydown'].forEach(ev => document.addEventListener(ev, unlockAudio, true));
+const play = url => new Promise(res => {
+  audio = voice; voice.onended = voice.onerror = res;
+  voice.src = url; voice.volume = S.volume;
+  voice.play().catch(() => { // still blocked: let the child tap to hear it instead of failing silently
+    pendingUrl = url; mood('', '🔊 Tap Puffy Pal to hear me!'); res();
+  });
+});
+$('pal').addEventListener('click', () => {
+  if (!pendingUrl) return;
+  voice.src = pendingUrl; pendingUrl = null; voice.play().catch(() => {}); mood('speaking', 'Puffy Pal is talking…');
+  voice.onended = () => mood('', idle());
+});
 async function speak(text) {
   const id = ++speakId;
   if (SERVER.voice !== 'kokoro') return browserSpeak(text);
@@ -568,11 +591,11 @@ function stopAll() {
 const LOUD = 12;          // mic level (0-128) that counts as speech; raise it in a noisy room
 const SILENCE_MS = 1200;  // stop after this much quiet once the child has spoken
 let recorder = null;
-async function recordForWhisper() {
+async function recordForWhisper(ctx) { // ctx is created inside the tap: iPhones keep audio paused otherwise
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); }
-  catch { mood('', 'Please allow the microphone'); return; }
-  const chunks = [], ctx = new AudioContext(), an = ctx.createAnalyser(), buf = new Uint8Array(1024);
+  catch { ctx.close(); mood('', 'Please allow the microphone'); return; }
+  const chunks = [], an = ctx.createAnalyser(), buf = new Uint8Array(1024);
   an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
   let heard = false; const start = performance.now(); let quietSince = start;
   recorder = new MediaRecorder(stream);
@@ -616,7 +639,9 @@ $('mic').onclick = () => {
   if (rec) return rec.stop();
   if (busy) return;
   stopAll();
-  SERVER.stt === 'whisper' ? recordForWhisper() : recordWithBrowser();
+  if (SERVER.stt !== 'whisper') return recordWithBrowser();
+  const ctx = new AudioContext(); ctx.resume(); // created + resumed synchronously inside the tap
+  recordForWhisper(ctx);
 };
 $('composer').onsubmit = e => { e.preventDefault(); send($('text').value); $('text').value = ''; };
 
