@@ -9,6 +9,7 @@ import json
 import os
 import re
 import urllib.request
+import uuid
 import wave
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,6 +19,7 @@ from flask import Flask, Response, jsonify, request
 LLM_URL = os.environ.get("LLM_URL", "http://localhost:11434/v1/chat/completions")
 LLM_MODEL = os.environ.get("LLM_MODEL", "toy-brain")
 LLM_KEY = os.environ.get("LLM_KEY", "")
+REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "none")  # set to "" for models without reasoning (e.g. Llama)
 APP_TOKEN = os.environ.get("APP_TOKEN", "")  # if set, the web app must send it (stops strangers burning your API credit)
 # Only these web pages may call the API (stops any random site you visit from using your laptop's AI/mic transcription).
 ALLOWED_ORIGINS = set(os.environ.get(
@@ -183,7 +185,7 @@ def index():
 @app.get("/api/health")
 def health():
     return jsonify(ok=True, model=LLM_MODEL, voice="kokoro" if kokoro() else "browser",
-                   stt="whisper" if whisper() else "browser", token_required=bool(APP_TOKEN))
+                   stt="whisper" if has_stt() else "browser", token_required=bool(APP_TOKEN))
 
 
 def llm_request(body):
@@ -197,8 +199,9 @@ def llm_request(body):
         "messages": msgs,
         "max_tokens": 200 if story else 90,
         "temperature": 0.6,
-        "reasoning_effort": "none",  # Qwen3: skip "thinking" -> ~0.6s instead of seconds
     }
+    if REASONING_EFFORT:  # Qwen3: "none" skips "thinking" (~0.6s instead of seconds); other models may reject it
+        payload["reasoning_effort"] = REASONING_EFFORT
     headers = {"Content-Type": "application/json"}
     if LLM_KEY:
         headers["Authorization"] = f"Bearer {LLM_KEY}"
@@ -369,10 +372,39 @@ def decode_capped(data, max_seconds):
     return (np.concatenate(chunks).astype(np.float32) / 32768.0) if chunks else np.zeros(0, np.float32)
 
 
-def transcribe(audio):
-    """Audio bytes -> text. Raises ValueError for empty / too long / unreadable audio."""
+STT_URL = os.environ.get("STT_URL", "")  # cloud Whisper for servers without a GPU, e.g. Groq:
+#                                        https://api.groq.com/openai/v1/audio/transcriptions
+STT_MODEL = os.environ.get("STT_MODEL", "whisper-large-v3-turbo")
+STT_KEY = os.environ.get("STT_KEY", LLM_KEY)
+
+
+def has_stt():
+    return bool(whisper() or STT_URL)
+
+
+def cloud_transcribe(audio, ctype):
+    """OpenAI-compatible /audio/transcriptions (Groq, OpenAI...). Size-capped: no decoder on small servers."""
+    if len(audio) > 1_000_000:  # ~20s of phone mic audio is well under 200 KB
+        raise ValueError("too long")
+    ext = "m4a" if "mp4" in ctype else "ogg" if "ogg" in ctype else "webm"
+    b = uuid.uuid4().hex
+    parts = [f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+             for k, v in (("model", STT_MODEL), ("language", "en"), ("prompt", "Hello Puffy Pal!"), ("response_format", "json"))]
+    parts.append(f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="speech.{ext}"\r\n'
+                 f'Content-Type: {ctype or "audio/webm"}\r\n\r\n'.encode() + audio + b"\r\n")
+    req = urllib.request.Request(STT_URL, b"".join(parts) + f"--{b}--\r\n".encode(),
+                                 {"Content-Type": f"multipart/form-data; boundary={b}", "Authorization": f"Bearer {STT_KEY}"})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return (json.load(r).get("text") or "").strip()
+
+
+def transcribe(audio, ctype=""):
+    """Audio bytes -> text, with local Whisper (GPU laptop) or cloud Whisper (STT_URL).
+    Raises ValueError for empty / too long / unreadable audio."""
     if not audio:
         raise ValueError("empty")
+    if not whisper():
+        return cloud_transcribe(audio, ctype)
     samples = decode_capped(audio, MAX_AUDIO_SECONDS)
     if samples is None:
         raise ValueError("too long")
@@ -383,10 +415,10 @@ def transcribe(audio):
 
 @app.post("/api/stt")
 def stt():
-    if not whisper():
+    if not has_stt():
         return jsonify(error="no whisper on this server"), 501
     try:
-        return jsonify(text=transcribe(request.get_data()))  # MAX_CONTENT_LENGTH already capped the size
+        return jsonify(text=transcribe(request.get_data(), request.content_type or ""))  # MAX_CONTENT_LENGTH already capped the size
     except Exception as e:
         app.logger.warning("STT rejected: %s", e)
         return jsonify(error="could not read audio"), 400
@@ -403,9 +435,9 @@ def talk():
         return jsonify(error="bad meta"), 400
     text = clip(meta.get("text"), 500)
     audio = request.files.get("audio")
-    if audio and whisper():
+    if audio and has_stt():
         try:
-            text = transcribe(audio.read())
+            text = transcribe(audio.read(), audio.mimetype or "")
         except Exception as e:
             app.logger.warning("STT rejected: %s", e)
             return jsonify(error="could not read audio"), 400

@@ -22,7 +22,7 @@ Sources: the user guide PDF (29 pages) and the Figma file, page 2 (27 screens).
 
 ## Needs you
 - [ ] **Steadier public link**: a free Cloudflare account turns the quick tunnel into a fixed address with steadier speed.
-- [ ] **24/7 backend**: a PythonAnywhere account and a Groq API key (see README). Until then the live site only talks while this laptop runs `start.sh`.
+- [ ] **24/7 on PythonAnywhere**: ready and tested in a PythonAnywhere-like setup (Flask only, cloud Whisper, browser voice: 12/12 browser test). Needs: upload `deploy/puffy_pal_pythonanywhere.zip`, paste `deploy/pythonanywhere_wsgi.py`, add your Groq key (README step 2).
 - [ ] **Contact Us screen**: needs your real support email or phone number.
 - [ ] **GitHub 2FA** by Dec 12, 2026, or the account gets restricted.
 - [ ] **Fix the laptop's proxy variables**: `HTTPS_PROXY` points at 192.168.2.8 and `https_proxy` at 192.168.2.4, and nothing answers at either. This breaks `gh`/`git push`.

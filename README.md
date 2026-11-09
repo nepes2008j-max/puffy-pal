@@ -32,20 +32,17 @@ Without Whisper on the server (e.g. PythonAnywhere), the browser's own speech re
 Push this folder to a GitHub repo. Then go to Settings → Pages → Source: `main` branch, `/docs` folder.
 The site will be at `https://<you>.github.io/<repo>/`.
 
-**2. Backend → PythonAnywhere** (Hacker plan, about $5/month; the free plan blocks most outside APIs)
-- Upload `server/app.py` and create a Flask web app that points at it (`from app import app as application` in the WSGI file).
-- Get a Groq API key at console.groq.com and set these in the WSGI file before the import:
-  ```python
-  os.environ["LLM_URL"] = "https://api.groq.com/openai/v1/chat/completions"
-  os.environ["LLM_MODEL"] = "qwen/qwen3-32b"      # or another fast Groq model
-  os.environ["LLM_KEY"] = "gsk_..."               # keep this secret: never put it in docs/
-  os.environ["APP_TOKEN"] = "pick-a-code"         # the parent enters this in Settings → Connection
-  os.environ["ALLOWED_ORIGINS"] = "https://nepes2008j-max.github.io"  # only this site may call the API
-  os.environ["ALLOWED_HOSTS"] = "<you>.pythonanywhere.com"           # the server's own address
-  ```
-- Kokoro doesn't fit on PythonAnywhere, so the app uses the browser's voice there automatically.
+**2. Everything 24/7 → PythonAnywhere** (app + AI at `https://<username>.pythonanywhere.com`)
+1. Groq: make a free API key at console.groq.com → API Keys.
+2. PythonAnywhere free accounts can only reach approved sites. In a Bash console run
+   `curl -s -o /dev/null -w "%{http_code}\n" https://api.groq.com/openai/v1/models`. `401` = reachable (good); `403`/error = blocked, so you need the $5 plan.
+3. Files tab → upload `deploy/puffy_pal_pythonanywhere.zip` to your home folder, then in a Bash console: `unzip -o puffy_pal_pythonanywhere.zip`
+4. Web tab → Add a new web app → Manual configuration → Python 3.10 or newer.
+5. Click the "WSGI configuration file" link, replace everything with `deploy/pythonanywhere_wsgi.py`, put in your username + Groq key, Save, then Reload.
+6. Open `https://<username>.pythonanywhere.com` → Toy page should show AI brain: Online.
 
-**3. Connect them:** set `HOSTED_API` at the top of the script in `docs/index.html` to `https://<you>.pythonanywhere.com`.
+There: the brain is Groq (Qwen3), the ears are Groq's cloud Whisper, the voice is the phone's own voice (no GPU for Kokoro).
+The free plan's web app stops after 3 months unless you click "Run until 3 months from today" on the Web tab.
 
 ## The toy brain
 

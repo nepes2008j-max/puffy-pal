@@ -9,8 +9,9 @@ import path from 'node:path';
 
 const URL_ = process.argv[2] || 'http://localhost:5000/';
 const DIR = mkdtempSync(path.join(os.tmpdir(), 'puffy-e2e-'));
+// TTS_FROM=<url>: borrow a Kokoro server for the fake mic when testing a server without one
 // fake mic: 0.5s quiet + question + 3s quiet (so silence detection ends the recording by itself)
-const q = Buffer.from(await (await fetch(new URL('/api/tts', URL_), { method: 'POST', headers: { 'Content-Type': 'application/json' },
+const q = Buffer.from(await (await fetch(new URL('/api/tts', process.env.TTS_FROM || URL_), { method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ text: 'Hello Puffy Pal! What do pandas eat?', speed: 0.95 }) })).arrayBuffer());
 writeFileSync(`${DIR}/q.wav`, q);
 execFileSync('ffmpeg', ['-loglevel', 'error', '-y', '-i', `${DIR}/q.wav`, '-af', 'adelay=500|500,apad=pad_dur=3', '-ar', '48000', '-ac', '1', `${DIR}/mic.wav`]);

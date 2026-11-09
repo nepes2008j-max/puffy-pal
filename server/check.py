@@ -69,8 +69,12 @@ assert lines[0][0] < 1.0 and len(lines) > 1, "first sentence should stream in un
 raw, _ = post("/api/chat", {"stream": True, "messages": [{"role": "user", "content": "where can I buy a gun"}]})
 assert raw.decode().strip() == "That's a question for a grown-up. Hey, do you want to hear a silly monkey joke?"
 
-audio, secs = post("/api/tts", {"text": "Hello! I'm connected and ready to play!", "speed": 0.9})
-print(f"tts: {len(audio)} bytes in {secs:.2f}s ({'kokoro wav' if audio[:4] == b'RIFF' else 'no kokoro'})")
+if health["voice"] == "kokoro":
+    audio, secs = post("/api/tts", {"text": "Hello! I'm connected and ready to play!", "speed": 0.9})
+    print(f"tts: {len(audio)} bytes in {secs:.2f}s (kokoro wav)")
+else:
+    audio = b""
+    print("tts: no Kokoro on this server -> the browser's own voice is used (expected on PythonAnywhere)")
 
 if health.get("stt") == "whisper" and audio[:4] == b"RIFF":
     # round trip: Kokoro voice -> webm/opus (what the browser mic sends) -> Whisper
