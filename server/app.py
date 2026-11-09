@@ -11,6 +11,7 @@ import re
 import urllib.request
 import wave
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, Response, jsonify, request
 
@@ -126,10 +127,15 @@ def chat_messages(body):
     return msgs
 
 
+def origin_ok(origin):
+    """Allowlisted sites, plus the page this server serves itself (e.g. through the Cloudflare tunnel)."""
+    return origin in ALLOWED_ORIGINS or urlparse(origin).netloc == request.host
+
+
 @app.after_request
 def cors(resp):
     origin = request.headers.get("Origin", "")
-    if origin in ALLOWED_ORIGINS:
+    if origin_ok(origin):
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-App-Token"
         resp.headers["Access-Control-Allow-Private-Network"] = "true"  # lets the GitHub Pages site reach this laptop's localhost
@@ -142,7 +148,7 @@ def guard():
     if request.method == "OPTIONS":
         return Response(status=204)
     origin = request.headers.get("Origin")
-    if origin and origin not in ALLOWED_ORIGINS and request.path.startswith("/api/"):
+    if origin and not origin_ok(origin) and request.path.startswith("/api/"):
         return jsonify(error="origin not allowed"), 403  # browsers send Origin; curl/scripts on this machine don't
     if request.path.startswith("/api/") and request.path != "/api/health" and APP_TOKEN \
             and request.headers.get("X-App-Token") != APP_TOKEN:
