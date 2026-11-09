@@ -4,6 +4,7 @@ Local (laptop):   LLM = Ollama toy-brain, voice = Kokoro.
 PythonAnywhere:   LLM = Groq (set LLM_URL / LLM_MODEL / LLM_KEY), voice = browser fallback.
 Both speak the OpenAI chat-completions format, so only env vars change.
 """
+import hmac
 import io
 import json
 import os
@@ -171,13 +172,27 @@ LIMITED = {"/api/chat", "/api/talk", "/api/stt", "/api/tts"}
 _hits = defaultdict(deque)
 
 
+TRUSTED_IP_HEADER = os.environ.get("TRUSTED_IP_HEADER", "")  # PythonAnywhere: X-Real-IP (its proxy overwrites it)
+
+
 def client_ip():
-    # Cloudflare (tunnel) and PythonAnywhere's proxy set these; both overwrite any value a client sends.
-    return request.headers.get("CF-Connecting-IP") or request.headers.get("X-Real-IP") or request.remote_addr or "?"
+    """Visitor address for rate limiting, only from headers a trusted proxy sets (clients can fake any header)."""
+    if TRUSTED_IP_HEADER and request.headers.get(TRUSTED_IP_HEADER):
+        return request.headers[TRUSTED_IP_HEADER]
+    tunnel = urlparse(tunnel_origin()).netloc
+    if tunnel and request.host == tunnel and request.remote_addr == "127.0.0.1":
+        return request.headers.get("CF-Connecting-IP") or "tunnel"  # cloudflared: Cloudflare overwrites this header
+    return request.remote_addr or "?"
 
 
 def too_many(ip):
-    now, q = time.monotonic(), _hits[ip]
+    now = time.monotonic()
+    if len(_hits) > 5000:  # cap memory: drop visitors with nothing in the last minute, then everyone if still huge
+        for k in [k for k, q in _hits.items() if not q or now - q[-1] > 60]:
+            del _hits[k]
+        if len(_hits) > 5000:
+            _hits.clear()
+    q = _hits[ip]
     while q and now - q[0] > 60:
         q.popleft()
     if len(q) >= RATE_PER_MIN:
@@ -195,11 +210,11 @@ def guard():
     origin = request.headers.get("Origin")
     if origin and not origin_ok(origin) and request.path.startswith("/api/"):
         return jsonify(error="origin not allowed"), 403  # browsers send Origin; curl/scripts on this machine don't
+    if request.path.startswith("/api/") and request.path != "/api/health" and APP_TOKEN \
+            and not hmac.compare_digest(request.headers.get("X-App-Token", ""), APP_TOKEN):
+        return jsonify(error="bad access code"), 401  # checked first: strangers can't use up a visitor's quota
     if request.path in LIMITED and too_many(client_ip()):
         return jsonify(error="slow down"), 429
-    if request.path.startswith("/api/") and request.path != "/api/health" and APP_TOKEN \
-            and request.headers.get("X-App-Token") != APP_TOKEN:
-        return jsonify(error="bad access code"), 401
 
 
 @app.get("/")

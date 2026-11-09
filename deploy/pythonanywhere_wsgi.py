@@ -23,6 +23,7 @@ os.environ["STT_URL"] = "https://api.groq.com/openai/v1/audio/transcriptions"
 
 # Only this site may use the API (plus a per-visitor limit of 40 AI requests a minute, built in).
 os.environ["ALLOWED_HOSTS"] = f"{USERNAME}.pythonanywhere.com"
+os.environ["TRUSTED_IP_HEADER"] = "X-Real-IP"  # set by PythonAnywhere's proxy, used for the rate limit
 os.environ["ALLOWED_ORIGINS"] = f"https://{USERNAME}.pythonanywhere.com,https://nepes2008j-max.github.io"
 
 sys.path.insert(0, f"/home/{USERNAME}/puffy_pal/server")
