@@ -127,9 +127,27 @@ def chat_messages(body):
     return msgs
 
 
+ROOT = Path(__file__).resolve().parent.parent
+ALLOWED_HOSTS = set(os.environ.get("ALLOWED_HOSTS", "localhost:5000,127.0.0.1:5000").split(","))
+
+
+def tunnel_origin():
+    """The exact public tunnel address start.sh wrote (empty if no tunnel). Re-read each time: the tunnel can restart."""
+    try:
+        return (ROOT / "public_url.txt").read_text().strip()
+    except OSError:
+        return ""
+
+
 def origin_ok(origin):
-    """Allowlisted sites, plus the page this server serves itself (e.g. through the Cloudflare tunnel)."""
-    return origin in ALLOWED_ORIGINS or urlparse(origin).netloc == request.host
+    """Only explicitly listed pages: the allowlist plus this laptop's own tunnel address. Never 'Origin == Host'
+    (a DNS-rebinding site controls both)."""
+    return bool(origin) and (origin in ALLOWED_ORIGINS or origin == tunnel_origin())
+
+
+def host_ok():
+    """Blocks DNS rebinding: a random domain pointed at 127.0.0.1 arrives with its own Host header."""
+    return request.host in ALLOWED_HOSTS or request.host == urlparse(tunnel_origin()).netloc
 
 
 @app.after_request
@@ -145,6 +163,8 @@ def cors(resp):
 
 @app.before_request
 def guard():
+    if not host_ok():
+        return jsonify(error="unknown host"), 403
     if request.method == "OPTIONS":
         return Response(status=204)
     origin = request.headers.get("Origin")
@@ -166,12 +186,11 @@ def health():
                    stt="whisper" if whisper() else "browser", token_required=bool(APP_TOKEN))
 
 
-@app.post("/api/chat")
-def chat():
-    body = request.get_json(silent=True) or {}
+def llm_request(body):
+    """(payload, headers, max_sentences) for the model, or None when the child's message trips the safety filter."""
     msgs = chat_messages(body)
     if msgs[-1]["role"] == "user" and UNSAFE.search(msgs[-1]["content"]):
-        return Response(SAFE_REPLY + "\n", mimetype="text/plain") if body.get("stream") else jsonify(reply=SAFE_REPLY)
+        return None
     story = (body.get("profile") or {}).get("focus") == "story"
     payload = {
         "model": LLM_MODEL,
@@ -183,8 +202,18 @@ def chat():
     headers = {"Content-Type": "application/json"}
     if LLM_KEY:
         headers["Authorization"] = f"Bearer {LLM_KEY}"
+    return payload, headers, 6 if story else 3
+
+
+@app.post("/api/chat")
+def chat():
+    body = request.get_json(silent=True) or {}
+    req_parts = llm_request(body)
+    if req_parts is None:
+        return Response(SAFE_REPLY + "\n", mimetype="text/plain") if body.get("stream") else jsonify(reply=SAFE_REPLY)
+    payload, headers, max_sentences = req_parts
     if body.get("stream"):
-        return Response(stream_sentences(payload, headers, 6 if story else 3), mimetype="text/plain")
+        return Response(stream_sentences(payload, headers, max_sentences), mimetype="text/plain")
     req = urllib.request.Request(LLM_URL, json.dumps(payload).encode(), headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -194,7 +223,7 @@ def chat():
         return jsonify(reply="Oops, my brain is taking a nap. Can you try again?", error=str(e)), 502
     if UNSAFE.search(reply):
         reply = SAFE_REPLY
-    return jsonify(reply=short(reply, 6 if story else 3) or "Hmm, can you say that again?")
+    return jsonify(reply=short(reply, max_sentences) or "Hmm, can you say that again?")
 
 
 def stream_sentences(payload, headers, max_sentences):
@@ -258,6 +287,34 @@ def kokoro():
     return _kokoro or None
 
 
+def wav_bytes(k, text, speed):
+    import numpy as np
+    samples, rate = k.create(text, voice=VOICE, speed=min(max(float(speed or 0.9), 0.6), 1.3), lang="en-us")
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes((np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes())
+    return buf.getvalue()
+
+
+def mp3_bytes(k, text, speed):
+    """Voice as 48 kbps MP3: ~8x smaller than WAV (matters on phones), plays in every browser, ~15 ms to encode."""
+    import av
+    import numpy as np
+    samples, rate = k.create(text, voice=VOICE, speed=min(max(float(speed or 0.9), 0.6), 1.3), lang="en-us")
+    buf = io.BytesIO()
+    with av.open(buf, "w", format="mp3") as out:
+        st = out.add_stream("libmp3lame", rate=rate)
+        st.bit_rate, st.layout = 48000, "mono"
+        frame = av.AudioFrame.from_ndarray(np.clip(samples, -1, 1).astype(np.float32).reshape(1, -1), format="flt", layout="mono")
+        frame.sample_rate = rate
+        for packet in [*st.encode(frame), *st.encode(None)]:
+            out.mux(packet)
+    return buf.getvalue()
+
+
 @app.post("/api/tts")
 def tts():
     k = kokoro()
@@ -265,18 +322,9 @@ def tts():
         return jsonify(error="no kokoro on this server"), 501
     body = request.get_json(silent=True) or {}
     text = clip(body.get("text"), 600)
-    speed = min(max(float(body.get("speed") or 0.9), 0.6), 1.3)
     if not text:
         return jsonify(error="empty"), 400
-    import numpy as np
-    samples, rate = k.create(text, voice=VOICE, speed=speed, lang="en-us")
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes((np.clip(samples, -1, 1) * 32767).astype(np.int16).tobytes())
-    return Response(buf.getvalue(), mimetype="audio/wav")
+    return Response(wav_bytes(k, text, body.get("speed")), mimetype="audio/wav")
 
 
 _whisper = None
@@ -321,25 +369,63 @@ def decode_capped(data, max_seconds):
     return (np.concatenate(chunks).astype(np.float32) / 32768.0) if chunks else np.zeros(0, np.float32)
 
 
+def transcribe(audio):
+    """Audio bytes -> text. Raises ValueError for empty / too long / unreadable audio."""
+    if not audio:
+        raise ValueError("empty")
+    samples = decode_capped(audio, MAX_AUDIO_SECONDS)
+    if samples is None:
+        raise ValueError("too long")
+    segments, _ = whisper().transcribe(samples, language="en", beam_size=1, vad_filter=True,
+                                       initial_prompt="Hello Puffy Pal!")  # primes the toy's name
+    return " ".join(seg.text.strip() for seg in segments).strip()
+
+
 @app.post("/api/stt")
 def stt():
-    w = whisper()
-    if not w:
+    if not whisper():
         return jsonify(error="no whisper on this server"), 501
-    audio = request.get_data()  # MAX_CONTENT_LENGTH already capped the size
-    if not audio:
-        return jsonify(error="bad audio"), 400
     try:
-        samples = decode_capped(audio, MAX_AUDIO_SECONDS)
-        if samples is None:
-            return jsonify(error="too long"), 400
-        segments, _ = w.transcribe(samples, language="en", beam_size=1, vad_filter=True,
-                                   initial_prompt="Hello Puffy Pal!")  # primes the toy's name
-        text = " ".join(s.text.strip() for s in segments).strip()
+        return jsonify(text=transcribe(request.get_data()))  # MAX_CONTENT_LENGTH already capped the size
     except Exception as e:
-        app.logger.error("STT error: %s", e)
+        app.logger.warning("STT rejected: %s", e)
         return jsonify(error="could not read audio"), 400
-    return jsonify(text=text)
+
+
+@app.post("/api/talk")
+def talk():
+    """One round trip for the whole turn (matters over the internet: ~0.3s per trip saved):
+    audio or typed text in -> NDJSON stream out: {"heard": ...}, then {"text": sentence, "audio": base64 mp3} each."""
+    import base64
+    try:
+        meta = json.loads(request.form.get("meta") or "{}")
+    except ValueError:
+        return jsonify(error="bad meta"), 400
+    text = clip(meta.get("text"), 500)
+    audio = request.files.get("audio")
+    if audio and whisper():
+        try:
+            text = transcribe(audio.read())
+        except Exception as e:
+            app.logger.warning("STT rejected: %s", e)
+            return jsonify(error="could not read audio"), 400
+    history = [m for m in (meta.get("messages") or []) if isinstance(m, dict)][-7:]
+    body = {"profile": meta.get("profile") or {}, "messages": history + [{"role": "user", "content": text}]}
+    speed, k = meta.get("speed"), kokoro()
+
+    def turn():
+        yield json.dumps({"heard": text}) + "\n"
+        if not text:
+            return
+        parts = llm_request(body)
+        sentences = [SAFE_REPLY + "\n"] if parts is None else stream_sentences(*parts)
+        for line in sentences:
+            item = {"text": line.strip()}
+            if k:
+                item["audio"] = base64.b64encode(mp3_bytes(k, item["text"], speed)).decode()
+            yield json.dumps(item) + "\n"
+
+    return Response(turn(), mimetype="application/x-ndjson")
 
 
 def warm_ollama():

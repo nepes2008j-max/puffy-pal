@@ -28,6 +28,13 @@ try:
 except urllib.error.HTTPError as e:
     assert e.code == 403, e.code
 print("cors: foreign origin blocked")
+if "localhost" in BASE or "127.0.0.1" in BASE:  # DNS rebinding: unknown Host header must be refused
+    try:
+        urllib.request.urlopen(urllib.request.Request(BASE + "/api/health", headers={"Host": "evil.example"}))
+        raise AssertionError("unknown Host was allowed")
+    except urllib.error.HTTPError as e:
+        assert e.code == 403, e.code
+    print("host: unknown host blocked")
 
 CASES = [
     ({"name": "Tommy", "age": "5", "level": "beginner", "focus": "english"}, "hello puffy pal!"),
@@ -84,5 +91,27 @@ if health.get("stt") == "whisper" and audio[:4] == b"RIFF":
     except urllib.error.HTTPError as e:
         assert e.code == 400, e.code
     print(f"stt: 60s upload ({len(long_webm)} bytes) refused")
+
+    # one round trip: audio in -> heard + sentences with voice
+    def multipart(fields, files):
+        b = "----puffy"
+        out = b""
+        for k, v in fields.items():
+            out += f'--{b}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
+        for k, (name, data, ctype) in files.items():
+            out += f'--{b}\r\nContent-Disposition: form-data; name="{k}"; filename="{name}"\r\nContent-Type: {ctype}\r\n\r\n'.encode() + data + b"\r\n"
+        return out + f"--{b}--\r\n".encode(), f"multipart/form-data; boundary={b}"
+    data, ctype = multipart({"meta": json.dumps({"profile": {"name": "Sam", "age": "7"}, "messages": []})},
+                            {"audio": ("a.webm", webm, "audio/webm")})
+    t = time.time()
+    with urllib.request.urlopen(urllib.request.Request(BASE + "/api/talk", data, {"Content-Type": ctype}), timeout=60) as r:
+        items = []
+        for raw_line in r:
+            items.append((time.time() - t, json.loads(raw_line)))
+    heard_at, first = items[0], items[1]
+    print(f"talk: heard {heard_at[1]['heard']!r} at {heard_at[0]:.2f}s, first voiced sentence at {first[0]:.2f}s, "
+          f"{len(items) - 1} sentences")
+    assert "connected" in heard_at[1]["heard"].lower() and first[1]["text"]
+    assert ("audio" in first[1]) == (health["voice"] == "kokoro")
 assert slow == 0, f"{slow} replies took over 3s"
 print("OK")

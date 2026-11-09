@@ -16,8 +16,10 @@ Sources: the user guide PDF (29 pages) and the Figma file, page 2 (27 screens).
 - [x] Installable on phones (PWA manifest and icons): "Add to Home Screen" opens full screen like an app.
 - [x] About Puffy Pal screen (Figma "About").
 - [x] `start.sh`: one command starts the server and opens the app.
+- [x] `./start.sh public`: a Cloudflare quick tunnel gives a public https link that works from any network while the laptop is on. One request per turn (audio in, voiced sentences out as MP3): about 1.2–1.7 s to the first sound over the internet, sometimes 2.5–3 s because quick tunnels vary.
 
 ## Needs you
+- [ ] **Steadier public link**: a free Cloudflare account turns the quick tunnel into a fixed address with steadier speed.
 - [ ] **24/7 backend**: a PythonAnywhere account and a Groq API key (see README). Until then the live site only talks while this laptop runs `start.sh`.
 - [ ] **Contact Us screen**: needs your real support email or phone number.
 - [ ] **GitHub 2FA** by Dec 12, 2026, or the account gets restricted.

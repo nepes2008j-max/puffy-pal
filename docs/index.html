@@ -310,7 +310,7 @@ const $ = id => document.getElementById(id);
 const dayKey = d => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
 
 const call = (path, body) => {
-  const raw = body instanceof Blob;
+  const raw = body instanceof Blob || body instanceof FormData;
   return fetch(api() + path, {
     method: body ? 'POST' : 'GET',
     headers: {...(raw ? {} : {'Content-Type': 'application/json'}), ...(S.token ? {'X-App-Token': S.token} : {})},
@@ -458,24 +458,32 @@ function bubble(role, text) {
 }
 function mood(m, text) { $('pal').className = 'pal ' + m; $('state').textContent = text; }
 
-async function send(text) {
-  text = text.trim();
-  if (!text || busy) return;
+const send = text => talk({text: text.trim()});
+// One request per turn: audio (or typed text) goes up once; the server streams back NDJSON lines:
+// {"heard": "..."} then {"text": sentence, "audio": base64 mp3} for each sentence (no audio = use browser voice).
+async function talk({text = '', audio = null}) {
+  if (busy || (!text && !audio)) return;
   busy = true;
-  messages.push({role: 'user', content: text}); bubble('user', text);
-  mood('thinking', 'Puffy Pal is thinking…');
+  const history = messages.slice(-7);
+  if (text) { messages.push({role: 'user', content: text}); bubble('user', text); }
+  mood('thinking', audio ? 'Puffy Pal is listening…' : 'Puffy Pal is thinking…');
+  const fd = new FormData();
+  fd.append('meta', JSON.stringify({text, messages: history, speed: S.speed,
+    profile: {...S.child, level: S.level, focus: S.focus, gentle: S.gentle}}));
+  if (audio) fd.append('audio', audio, 'speech.webm');
   try {
-    const r = await call('/api/chat', {stream: true, messages, profile: {...S.child, level: S.level, focus: S.focus, gentle: S.gentle}});
+    const r = await call('/api/talk', fd);
     if (r.status === 401) throw new Error('code');
-    if (!r.ok || !r.body) throw new Error('down');
-    await streamReply(r);
+    if (!r.ok || !r.body) throw new Error(r.status === 400 ? 'audio' : 'down');
+    await streamReply(r, !!audio);
   } catch (e) {
-    say(e.message === 'code' ? 'I need the access code. Ask a grown-up to check Settings.'
+    if (e.message === 'audio') mood('', "I didn't catch that. Try again!");
+    else say(e.message === 'code' ? 'I need the access code. Ask a grown-up to check Settings.'
       : "I can't reach my brain right now. Ask a grown-up to check the connection.");
   } finally { busy = false; }
 }
-// Show + speak the reply sentence by sentence as the server streams it (one sentence per line).
-async function streamReply(r) {
+const audioUrl = b64 => URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], {type: 'audio/mpeg'}));
+async function streamReply(r, fromAudio) {
   const id = ++speakId, reader = r.body.getReader(), dec = new TextDecoder();
   const sentences = [], voices = [];
   let buf = '', ended = false, wake = null, el = null;
@@ -483,9 +491,8 @@ async function streamReply(r) {
     for (let i = 0; ; i++) {
       while (i >= sentences.length && !ended) await new Promise(res => wake = res);
       if (i >= sentences.length || id !== speakId) return;
-      const url = await voices[i];
+      voices[i] ? await play(voices[i]) : await browserSpeak(sentences[i]);
       if (id !== speakId) return;
-      url ? await play(url) : await browserSpeak(sentences[i]);
     }
   })();
   for (;;) {
@@ -494,16 +501,25 @@ async function streamReply(r) {
     buf += dec.decode(value, {stream: true});
     let k;
     while ((k = buf.indexOf('\n')) >= 0) {
-      const s = buf.slice(0, k).trim(); buf = buf.slice(k + 1);
-      if (!s) continue;
+      const line = buf.slice(0, k).trim(); buf = buf.slice(k + 1);
+      if (!line) continue;
+      const item = JSON.parse(line);
+      if ('heard' in item) {
+        if (fromAudio) {
+          if (!item.heard) { ended = true; wake?.(); mood('', "I didn't catch that. Try again!"); return; }
+          messages.push({role: 'user', content: item.heard}); bubble('user', item.heard);
+          mood('thinking', 'Puffy Pal is thinking…');
+        }
+        continue;
+      }
       if (!el) { el = bubble('assistant', ''); mood('speaking', 'Puffy Pal is talking…'); }
-      sentences.push(s); el.textContent = sentences.join(' '); $('chat').scrollTop = $('chat').scrollHeight;
-      voices.push(SERVER.voice === 'kokoro' ? ttsUrl(s) : Promise.resolve(null)); // start voicing right away
+      sentences.push(item.text); voices.push(item.audio ? audioUrl(item.audio) : null);
+      el.textContent = sentences.join(' '); $('chat').scrollTop = $('chat').scrollHeight;
       wake?.();
     }
   }
   ended = true; wake?.();
-  messages.push({role: 'assistant', content: sentences.join(' ')});
+  if (sentences.length) messages.push({role: 'assistant', content: sentences.join(' ')});
   await player;
   if (id === speakId && $('pal').classList.contains('speaking')) mood('', idle());
 }
@@ -564,12 +580,7 @@ async function recordForWhisper() {
     stream.getTracks().forEach(t => t.stop()); ctx.close(); $('mic').classList.remove('live');
     if (r.cancelled) return;
     if (!heard) { mood('', "I didn't hear you. Tap and try again!"); return; }
-    mood('thinking', 'Puffy Pal is listening…');
-    try {
-      const res = await call('/api/stt', new Blob(chunks, {type: r.mimeType}));
-      const {text} = await res.json();
-      text ? send(text) : mood('', "I didn't catch that. Try again!");
-    } catch { mood('', "I can't hear right now. Ask a grown-up to check the connection."); }
+    talk({audio: new Blob(chunks, {type: r.mimeType})});
   };
   (function watch() { // stop by itself when the child finishes talking
     if (!recorder || recorder.state !== 'recording') return;

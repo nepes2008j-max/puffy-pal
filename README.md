@@ -14,6 +14,7 @@ server/check.py   smoke test: speed, clean output, safety
 ```bash
 ./start.sh            # starts the AI server and opens the live site (it talks to this laptop)
 ./start.sh local      # same, but opens http://localhost:5000
+./start.sh public     # public https link for phones / other networks (Cloudflare quick tunnel)
 python3 server/check.py   # speed + safety + voice round-trip test
 ```
 
@@ -38,6 +39,7 @@ The site will be at `https://<you>.github.io/<repo>/`.
   os.environ["LLM_KEY"] = "gsk_..."               # keep this secret: never put it in docs/
   os.environ["APP_TOKEN"] = "pick-a-code"         # the parent enters this in Settings → Connection
   os.environ["ALLOWED_ORIGINS"] = "https://nepes2008j-max.github.io"  # only this site may call the API
+  os.environ["ALLOWED_HOSTS"] = "<you>.pythonanywhere.com"           # the server's own address
   ```
 - Kokoro doesn't fit on PythonAnywhere, so the app uses the browser's voice there automatically.
 
