@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Puffy Pal</title>
+<link rel="icon" href="monkey.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F4F1FB; --card:#fff; --ink:#1E1B2E; --muted:#625D78; --line:#ECE8F6;
+  --purple:#5B3CC4; --purple-2:#6A4DD0; --purple-soft:#EAE4FB; --blue:#2F6BD1;
+  --green:#22A65A; --red:#E0262F; --radius:18px;
+}
+*{box-sizing:border-box;margin:0}
+body{background:#E9E4F7;font:15px/1.4 Inter,system-ui,sans-serif;color:var(--ink);-webkit-tap-highlight-color:transparent}
+.app{max-width:430px;min-height:100dvh;margin:0 auto;background:var(--bg);position:relative;padding-bottom:96px}
+.screen{display:none;padding:28px 20px 12px}
+.screen.on{display:block}
+h1.brand{font:700 40px Fredoka,sans-serif;color:var(--purple);letter-spacing:1.5px;text-align:center}
+h2{font:600 22px Inter;text-align:center;margin-bottom:18px}
+.sub{color:var(--muted);text-align:center}
+.card{background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:14px;box-shadow:0 1px 0 var(--line)}
+.label{font:600 12px Inter;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin:18px 4px 8px}
+button{font:inherit;border:0;cursor:pointer;color:inherit;background:none}
+:focus-visible{outline:3px solid var(--purple-2);outline-offset:2px}
+.hero{width:230px;height:276px;margin:18px auto 22px;border-radius:120px;background:#fff;display:grid;place-items:center;overflow:hidden}
+.hero img{width:100%}
+.big{display:flex;align-items:center;gap:16px;width:100%;color:#fff;border-radius:16px;padding:18px 22px;margin-bottom:14px;text-align:left}
+.big svg{width:38px;height:38px;flex:none}
+.big b{display:block;font-weight:600;font-size:16px}
+.big small{opacity:.9}
+.big.purple{background:var(--purple-2)} .big.blue{background:var(--blue)}
+nav{position:fixed;bottom:10px;left:50%;transform:translateX(-50%);width:min(410px,calc(100% - 16px));background:#fff;border-radius:28px;display:flex;justify-content:space-around;padding:8px 6px;box-shadow:0 4px 20px #5b3cc41a;z-index:5}
+nav button{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#6E6985;padding:4px 10px}
+nav button i{width:46px;height:46px;border-radius:50%;display:grid;place-items:center}
+nav button svg{width:26px;height:26px}
+nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);color:#fff}
+.row{display:flex;align-items:center;gap:14px;padding:12px 2px;border-bottom:1px solid var(--line);width:100%;text-align:left}
+.row:last-child{border:0}
+.row .t{flex:1} .row .t b{display:block;font-weight:500} .row .t small{color:var(--muted);font-size:12px}
+.row svg{width:24px;height:24px;color:var(--purple);flex:none}
+.chev{color:#555;font-size:20px}
+.row input:not([type=checkbox]):not([type=radio]):not([type=range]){border:0;text-align:right;font:inherit;color:var(--ink);background:transparent;width:55%;padding:4px 6px}
+.row input:focus{outline:none;background:var(--purple-soft);border-radius:8px}
+.tog{appearance:none;width:46px;height:28px;border-radius:20px;background:#d6d2e2;position:relative;cursor:pointer;flex:none}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:.2s}
+.tog:checked{background:var(--purple)} .tog:checked::after{left:21px}
+.opt{display:flex;gap:14px;align-items:flex-start;padding:12px 4px;cursor:pointer}
+.opt input{accent-color:var(--purple);width:20px;height:20px;margin-top:2px}
+.opt b{display:block;font-weight:500;color:var(--purple)} .opt small{color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{padding:8px 14px;border-radius:20px;background:var(--purple-soft);color:var(--purple);font-weight:500}
+.chip.on{background:var(--purple);color:#fff}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--bg);border-radius:14px;padding:12px}
+.tile small{color:var(--muted);display:block} .tile b{font-weight:500}
+.ok{color:var(--green)} .bad{color:var(--red)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;margin-right:4px}
+.seg{display:flex;background:#fff;border-radius:12px;padding:4px;margin-bottom:16px}
+.seg button{flex:1;padding:8px;border-radius:9px;color:var(--muted)} .seg button.on{background:var(--purple);color:#fff}
+.bars{display:flex;align-items:flex-end;gap:10px;height:230px;padding:0 4px}
+.bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:11px;color:var(--muted)}
+.bar div{width:100%;background:var(--purple-2);border-radius:6px 6px 0 0;min-height:3px}
+.bar .v{margin-bottom:4px;color:var(--ink)}
+.stat{font:700 30px Inter}
+.talk-top{display:flex;align-items:center;justify-content:space-between}
+.pal{width:150px;height:170px;margin:4px auto 6px;border-radius:80px;background:#fff;display:grid;place-items:center;overflow:hidden}
+.pal img{width:100%}
+.pal.speaking{animation:bob .5s ease-in-out infinite alternate}
+.pal.thinking{animation:tilt 1s ease-in-out infinite alternate}
+@keyframes bob{to{transform:translateY(-6px) scale(1.03)}}
+@keyframes tilt{from{transform:rotate(-4deg)}to{transform:rotate(4deg)}}
+@media (prefers-reduced-motion:reduce){.pal{animation:none!important}}
+@media (max-height:640px){.pal{width:90px;height:100px}.screen#talk{padding-top:12px}}
+.state{text-align:center;color:var(--purple);font-weight:500;min-height:22px}
+.app:has(#talk.on){padding-bottom:16px} .app:has(#talk.on) nav{display:none}
+.chat{height:calc(100dvh - 330px);min-height:140px;overflow-y:auto;padding:8px 2px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:82%;padding:10px 14px;border-radius:18px;font-size:16px}
+.msg.user{align-self:flex-end;background:var(--purple);color:#fff;border-bottom-right-radius:6px}
+.msg.assistant{align-self:flex-start;background:#fff;border-bottom-left-radius:6px}
+.composer{display:flex;align-items:center;gap:10px;margin-top:8px}
+.composer input{flex:1;min-width:0;border:0;border-radius:24px;padding:13px 16px;font:inherit;background:#fff}
+.mic{width:64px;height:64px;border-radius:50%;background:var(--purple);color:#fff;display:grid;place-items:center;flex:none;box-shadow:0 6px 18px #5b3cc455}
+.mic svg{width:30px;height:30px}
+.mic.live{background:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 12px #e0262f22}}
+.send{width:44px;height:44px;border-radius:50%;background:var(--purple-soft);color:var(--purple);font-size:20px;flex:none}
+.sleep{text-align:center;padding:40px 10px;color:var(--muted)}
+.back{font-size:30px;line-height:1;padding:0 8px;color:var(--ink)}
+.hint{background:var(--purple-soft);color:var(--purple);border-radius:14px;padding:12px 14px;font-size:13px}
+.danger{width:100%;padding:14px;border-radius:16px;background:#fff;color:var(--red);font-weight:600}
+.primary{width:100%;padding:14px;border-radius:16px;background:var(--purple);color:#fff;font-weight:600}
+.guide p{margin:8px 0;color:#444}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+
+<section class="screen on" id="home">
+  <h1 class="brand">Puffy Pal</h1>
+  <p class="sub">Your child's learning companion</p>
+  <div class="hero"><img src="monkey.png" alt="Puffy Pal the monkey"></div>
+  <button class="big purple" data-go="talk">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    <span><b>Talk to Puffy Pal</b><small>Tap and start speaking English</small></span>
+  </button>
+  <button class="big blue" data-go="guide">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 5c3-1 6-1 9 1v14c-3-2-6-2-9-1zM21 5c-3-1-6-1-9 1v14c3-2 6-2 9-1z"/></svg>
+    <span><b>Guide</b><small>Learn how to use Puffy Pal</small></span>
+  </button>
+</section>
+
+<section class="screen" id="talk">
+  <div class="talk-top"><button class="back" data-go="home" aria-label="Back">‹</button><span id="talkName" style="font-weight:600"></span><span style="width:40px"></span></div>
+  <div class="pal" id="pal"><img src="monkey.png" alt=""></div>
+  <div class="state" id="state" aria-live="polite"></div>
+  <div class="chat" id="chat"></div>
+  <form class="composer" id="composer">
+    <button type="button" class="mic" id="mic" aria-label="Talk">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+    </button>
+    <input id="text" placeholder="…or type here" autocomplete="off" aria-label="Message">
+    <button class="send" aria-label="Send">➤</button>
+  </form>
+  <div class="sleep" id="sleeping" hidden><p style="font-size:40px">😴</p><p>Puffy Pal is sleeping now.<br>See you tomorrow!</p></div>
+</section>
+
+<section class="screen" id="history">
+  <h2>Time Management</h2>
+  <div class="seg" id="seg"><button data-r="day" class="on">Daily</button><button data-r="week">Weekly</button><button data-r="month">Monthly</button></div>
+  <div class="card"><div class="bars" id="bars"></div></div>
+  <div class="card"><small class="sub" style="text-align:left;display:block">Daily average (last 7 days)</small><div class="stat" id="avg">0m</div><small id="vsY" class="sub" style="text-align:left;display:block"></small></div>
+  <div class="card"><b style="color:var(--purple)">Usage insights</b><p class="sub" style="text-align:left;margin-top:6px">Most active day: <b id="topDay">–</b><br>Learning streak: <b id="streak">0 days</b></p></div>
+</section>
+
+<section class="screen" id="toy">
+  <h1 class="brand" style="font-size:32px;margin-bottom:16px">My Puffy Pal</h1>
+  <div class="card">
+    <div class="tiles">
+      <div class="tile"><small>AI brain</small><b id="stBrain">Checking…</b></div>
+      <div class="tile"><small>Voice</small><b id="stVoice">–</b></div>
+      <div class="tile"><small>Microphone</small><b id="stMic">–</b></div>
+      <div class="tile"><small>Model</small><b id="stModel">–</b></div>
+    </div>
+  </div>
+  <div class="card" style="padding:4px 16px">
+    <button class="row" data-go="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg><span class="t"><b>Toy Settings</b><small>English level, focus, voice</small></span><span class="chev">›</span></button>
+    <button class="row" data-go="settings" data-anchor="sleepCard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z"/></svg><span class="t"><b>Sleep Mode</b><small>Manage quiet hours</small></span><span class="chev">›</span></button>
+    <button class="row" id="testBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12a8 8 0 0 1 16 0M8 12a4 4 0 0 1 8 0"/><circle cx="12" cy="12" r="1.5"/></svg><span class="t"><b>Test Connection</b><small id="testMsg">Check toy response</small></span><span class="chev">›</span></button>
+  </div>
+  <div class="card" style="display:flex;align-items:center;gap:12px">
+    <div style="flex:1"><b style="color:var(--purple)">♥ About Puffy Pal</b><p class="sub" style="text-align:left;font-size:13px">Personalized learning for your little explorer!</p></div>
+    <img src="monkey.png" alt="" width="70">
+  </div>
+</section>
+
+<section class="screen" id="profile">
+  <h2>Profile</h2>
+  <div class="card" style="padding:4px 16px">
+    <p class="label" style="margin-left:0">Child information</p>
+    <label class="row"><span class="t">Name</span><input data-k="child.name" placeholder="Tommy"></label>
+    <label class="row"><span class="t">Age</span><input data-k="child.age" type="number" min="3" max="13" placeholder="6"></label>
+    <label class="row"><span class="t">Hobbies</span><input data-k="child.hobbies" placeholder="Space & dinosaurs"></label>
+    <label class="row"><span class="t">Home language</span><input data-k="child.lang" placeholder="English"></label>
+  </div>
+  <div class="card" style="padding:4px 16px">
+    <p class="label" style="margin-left:0">Parent information</p>
+    <label class="row"><span class="t">Name</span><input data-k="parent.name" placeholder="Jane Smith"></label>
+    <label class="row"><span class="t">Email</span><input data-k="parent.email" type="email" placeholder="jane@email.com"></label>
+  </div>
+  <p class="hint">Saved only on this device. Puffy Pal uses the name, age and hobbies to make conversations personal.</p>
+</section>
+
+<section class="screen" id="settings">
+  <div class="talk-top"><button class="back" data-go="toy" aria-label="Back">‹</button><h2 style="margin:0">Settings</h2><span style="width:40px"></span></div>
+  <p class="label">English level</p>
+  <div class="card" id="levels"></div>
+  <p class="label">Learning focus</p>
+  <div class="card chips" id="focus"></div>
+  <p class="label">General</p>
+  <div class="card" style="padding:4px 16px">
+    <label class="row"><span class="t"><b>Gentle Help</b><small>Extra kind and supportive replies</small></span><input type="checkbox" class="tog" data-k="gentle"></label>
+    <label class="row"><span class="t"><b>Voice speed</b><small id="speedVal"></small></span><input type="range" min="0.7" max="1.2" step="0.05" data-k="speed" style="width:45%;accent-color:var(--purple)"></label>
+  </div>
+  <p class="label" id="sleepCard">Sleep mode</p>
+  <div class="card" style="padding:4px 16px">
+    <label class="row"><span class="t"><b>Quiet hours</b><small>Puffy Pal sleeps at bedtime</small></span><input type="checkbox" class="tog" data-k="sleep.on"></label>
+    <label class="row"><span class="t">Sleep at</span><input type="time" data-k="sleep.from"></label>
+    <label class="row"><span class="t">Wake up at</span><input type="time" data-k="sleep.to"></label>
+  </div>
+  <p class="label">Connection (for grown-ups)</p>
+  <div class="card" style="padding:4px 16px">
+    <label class="row"><span class="t">Server</span><input data-k="api" id="apiInput"></label>
+    <label class="row"><span class="t">Access code</span><input data-k="token" type="password" placeholder="optional"></label>
+  </div>
+  <button class="danger" id="resetBtn">Reset the Toy</button>
+</section>
+
+<section class="screen guide" id="guide">
+  <div class="talk-top"><button class="back" data-go="home" aria-label="Back">‹</button><h2 style="margin:0">Guide</h2><span style="width:40px"></span></div>
+  <div class="card">
+    <p><b>1. Set up the profile.</b> Add your child's name, age and hobbies in Profile.</p>
+    <p><b>2. Pick an English level</b> and a learning focus in Toy → Toy Settings.</p>
+    <p><b>3. Talk!</b> Tap the purple button and speak. Puffy Pal listens, answers out loud and asks a question back.</p>
+    <p><b>Try saying:</b> "Hello Puffy Pal!", "Can you tell me a story?", "What does brave mean?", "Why is the sky blue?"</p>
+    <p><b>Sleep mode</b> keeps Puffy Pal quiet at bedtime. <b>History</b> shows how long your child practised.</p>
+    <p class="sub" style="text-align:left">Tip: voice input works best in Chrome or Edge. You can always type instead.</p>
+  </div>
+  <button class="primary" data-go="talk">Start talking</button>
+</section>
+
+<nav id="nav">
+  <button data-go="home" class="on"><i><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 12h3v8h5v-5h4v5h5v-8h3z"/></svg></i>Home</button>
+  <button data-go="history"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></svg></i>History</button>
+  <button data-go="toy"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="13" r="6"/><circle cx="5" cy="8" r="2.5"/><circle cx="19" cy="8" r="2.5"/><circle cx="10" cy="12" r=".8" fill="currentColor"/><circle cx="14" cy="12" r=".8" fill="currentColor"/><path d="M10 15.5c1 .8 3 .8 4 0"/></svg></i>Toy</button>
+  <button data-go="profile"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="10" r="3"/><path d="M6.5 18.5c3-3 8-3 11 0"/></svg></i>Profile</button>
+</nav>
+</div>
+
+<script>
+// When hosted on GitHub Pages, put your PythonAnywhere URL here (or set it in Settings → Connection).
+const HOSTED_API = 'https://YOUR-USERNAME.pythonanywhere.com';
+const DEFAULT_API = location.hostname.endsWith('github.io') ? HOSTED_API
+  : location.protocol === 'file:' ? 'http://localhost:5000' : location.origin;
+
+const LEVELS = [
+  ['beginner', 'Beginner (4–5 yrs)', 'Simple words and short sentences'],
+  ['elementary', 'Elementary (6–7 yrs)', 'Basic conversations and questions'],
+  ['intermediate', 'Intermediate (8–9 yrs)', 'More complex sentences and topics'],
+  ['upper', 'Upper Intermediate (9–10 yrs)', 'Advanced conversations'],
+  ['advanced', 'Advanced (11–12 yrs)', 'Challenging topics and vocabulary'],
+];
+const FOCUS = [['mixed','Mixed Learning'],['english','English Practice'],['conversation','Conversations'],['story','Storytelling'],['homework','Homework Help']];
+
+// ---------- state: localStorage, this device only ----------
+const DEFAULTS = {child:{name:'',age:'',hobbies:'',lang:''}, parent:{name:'',email:''}, level:'elementary', focus:'mixed',
+  levelPicked:false, gentle:true, speed:0.9, sleep:{on:false,from:'20:30',to:'07:00'}, usage:{}, api:'', token:''};
+let S = structuredClone(DEFAULTS);
+try { Object.assign(S, JSON.parse(localStorage.getItem('puffypal') || '{}')); } catch {}
+const save = () => { try { localStorage.setItem('puffypal', JSON.stringify(S)); } catch {} };
+const get = k => k.split('.').reduce((o, p) => o?.[p], S);
+const set = (k, v) => { const ps = k.split('.'), last = ps.pop(); ps.reduce((o, p) => o[p] ??= {}, S)[last] = v; save(); };
+const api = () => (S.api || DEFAULT_API).replace(/\/$/, '');
+const $ = id => document.getElementById(id);
+const dayKey = d => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+
+const call = (path, body) => fetch(api() + path, {
+  method: body ? 'POST' : 'GET',
+  headers: {'Content-Type': 'application/json', ...(S.token ? {'X-App-Token': S.token} : {})},
+  body: body && JSON.stringify(body),
+});
+
+// ---------- navigation ----------
+let current = 'home';
+function go(id, anchor) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.go === id));
+  if (id !== 'talk') stopAll();
+  current = id;
+  ({talk: enterTalk, history: drawHistory, toy: checkToy})[id]?.();
+  anchor ? $(anchor).scrollIntoView() : window.scrollTo(0, 0);
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-go]');
+  if (b) go(b.dataset.go, b.dataset.anchor);
+});
+
+// ---------- profile + settings binding ----------
+$('apiInput').placeholder = DEFAULT_API;
+document.querySelectorAll('[data-k]').forEach(el => {
+  const k = el.dataset.k, v = get(k);
+  if (el.type === 'checkbox') el.checked = !!v; else el.value = v ?? '';
+  el.addEventListener('input', () => {
+    set(k, el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value.trim());
+    if (k === 'speed') showSpeed();
+    if (k === 'child.age' && !S.levelPicked) autoLevel();
+  });
+});
+const showSpeed = () => $('speedVal').textContent = S.speed.toFixed(2) + '×';
+showSpeed();
+
+function autoLevel() {
+  const a = +S.child.age;
+  if (!a) return;
+  S.level = a <= 5 ? 'beginner' : a <= 7 ? 'elementary' : a <= 9 ? 'intermediate' : a <= 10 ? 'upper' : 'advanced';
+  save(); drawLevels();
+}
+function drawLevels() {
+  $('levels').innerHTML = LEVELS.map(([v, t, d]) =>
+    `<label class="opt"><input type="radio" name="lvl" value="${v}" ${S.level === v ? 'checked' : ''}><span><b>${t}</b><small>${d}</small></span></label>`).join('')
+    + '<p class="hint" style="margin-top:6px">ⓘ You can change this anytime.</p>';
+}
+$('levels').addEventListener('change', e => { S.level = e.target.value; S.levelPicked = true; save(); });
+function drawFocus() {
+  $('focus').innerHTML = FOCUS.map(([v, t]) => `<button class="chip ${S.focus === v ? 'on' : ''}" data-f="${v}">${t}</button>`).join('');
+}
+$('focus').addEventListener('click', e => { const f = e.target.dataset.f; if (f) { S.focus = f; save(); drawFocus(); } });
+drawLevels(); drawFocus();
+
+$('resetBtn').onclick = () => {
+  if (confirm('Reset Puffy Pal? This clears the profile, settings and history on this device.')) {
+    try { localStorage.removeItem('puffypal'); } catch {}
+    location.reload();
+  }
+};
+
+// ---------- talk ----------
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const IDLE = SR ? 'Tap the button and talk' : 'Type your message below';
+let messages = [], rec = null, audio = null, busy = false;
+
+function asleep() {
+  if (!S.sleep.on) return false;
+  const n = new Date().toTimeString().slice(0, 5), {from, to} = S.sleep;
+  return from > to ? (n >= from || n < to) : (n >= from && n < to);
+}
+function enterTalk() {
+  const sleeping = asleep();
+  $('sleeping').hidden = !sleeping;
+  $('composer').hidden = $('chat').hidden = sleeping;
+  $('talkName').textContent = S.child.name ? `Hi, ${S.child.name}!` : 'Puffy Pal';
+  mood('', sleeping ? '' : IDLE);
+  if (!sleeping && !messages.length) say(`Hi${S.child.name ? ' ' + S.child.name : ''}! I'm Puffy Pal. What do you want to talk about today?`);
+}
+function bubble(role, text) {
+  const d = document.createElement('div');
+  d.className = 'msg ' + role; d.textContent = text;
+  $('chat').append(d); $('chat').scrollTop = $('chat').scrollHeight;
+}
+function mood(m, text) { $('pal').className = 'pal ' + m; $('state').textContent = text; }
+
+async function send(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  busy = true;
+  messages.push({role: 'user', content: text}); bubble('user', text);
+  mood('thinking', 'Puffy Pal is thinking…');
+  let reply;
+  try {
+    const r = await call('/api/chat', {messages, profile: {...S.child, level: S.level, focus: S.focus, gentle: S.gentle}});
+    reply = r.status === 401 ? 'I need the access code. Ask a grown-up to check Settings.' : (await r.json()).reply;
+  } catch { reply = "I can't reach my brain right now. Ask a grown-up to check the connection."; }
+  busy = false;
+  if (current === 'talk') say(reply);
+}
+async function say(text) {
+  messages.push({role: 'assistant', content: text}); bubble('assistant', text);
+  mood('speaking', 'Puffy Pal is talking…');
+  const done = () => mood('', IDLE);
+  try {
+    const r = await call('/api/tts', {text, speed: S.speed});
+    if (!r.ok) throw 0;
+    audio = new Audio(URL.createObjectURL(await r.blob()));
+    audio.onended = done;
+    await audio.play();
+  } catch { // server has no Kokoro (e.g. PythonAnywhere) -> browser voice
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US'; u.rate = S.speed; u.pitch = 1.2; u.onend = done;
+    speechSynthesis.cancel(); speechSynthesis.speak(u);
+  }
+}
+function stopAll() {
+  audio?.pause(); speechSynthesis.cancel(); rec?.abort(); rec = null;
+  $('mic').classList.remove('live');
+}
+$('mic').onclick = () => {
+  if (!SR) { $('text').focus(); mood('', 'Voice works in Chrome or Edge — please type here'); return; }
+  if (rec) { rec.stop(); return; }
+  stopAll();
+  rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
+  rec.onresult = e => {
+    const t = [...e.results].map(r => r[0].transcript).join('');
+    $('text').value = t;
+    if (e.results[e.results.length - 1].isFinal) { $('text').value = ''; send(t); }
+  };
+  rec.onerror = e => mood('', e.error === 'not-allowed' ? 'Please allow the microphone' : "I didn't hear you. Try again!");
+  rec.onend = () => { rec = null; $('mic').classList.remove('live'); if ($('state').textContent === "I'm listening…") mood('', IDLE); };
+  rec.start(); $('mic').classList.add('live'); mood('', "I'm listening…");
+};
+$('composer').onsubmit = e => { e.preventDefault(); send($('text').value); $('text').value = ''; };
+
+// usage: count time while the talk screen is open and visible
+setInterval(() => {
+  if (current === 'talk' && !document.hidden && !asleep()) { const k = dayKey(new Date()); S.usage[k] = (S.usage[k] || 0) + 5; save(); }
+}, 5000);
+
+// ---------- history ----------
+let range = 'day';
+const fmt = s => { const m = Math.round(s / 60), h = Math.floor(m / 60); return h ? `${h}h ${m % 60}m` : `${m}m`; };
+const shift = (d, days) => { const x = new Date(d); x.setDate(x.getDate() + days); return x; };
+const sumDays = (from, n) => { let t = 0; for (let i = 0; i < n; i++) t += S.usage[dayKey(shift(from, i))] || 0; return t; };
+$('seg').onclick = e => {
+  const r = e.target.dataset.r; if (!r) return; range = r;
+  [...$('seg').children].forEach(b => b.classList.toggle('on', b.dataset.r === r)); drawHistory();
+};
+function drawHistory() {
+  const now = new Date(), cols = [];
+  for (let i = 6; i >= 0; i--) {
+    if (range === 'day') { const d = shift(now, -i); cols.push([d.toLocaleDateString('en', {weekday: 'short'}), S.usage[dayKey(d)] || 0]); }
+    if (range === 'week') cols.push([i ? `-${i}w` : 'This wk', sumDays(shift(now, -now.getDay() - 7 * i), 7)]);
+    if (range === 'month') { const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      cols.push([d.toLocaleDateString('en', {month: 'short'}), sumDays(d, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate())]); }
+  }
+  const max = Math.max(...cols.map(c => c[1]), 60);
+  $('bars').innerHTML = cols.map(([l, v]) => `<div class="bar"><span class="v">${v ? fmt(v) : ''}</span><div style="height:${v / max * 85}%"></div><span>${l}</span></div>`).join('');
+  const day = i => S.usage[dayKey(shift(now, -i))] || 0;
+  $('avg').textContent = fmt(sumDays(shift(now, -6), 7) / 7);
+  $('vsY').textContent = `Today ${fmt(day(0))} · yesterday ${fmt(day(1))}`;
+  let streak = 0; const start = day(0) ? 0 : 1;
+  while (streak < 366 && day(start + streak) > 0) streak++;
+  $('streak').textContent = streak + (streak === 1 ? ' day' : ' days');
+  const byWd = Array(7).fill(0);
+  Object.entries(S.usage).forEach(([k, v]) => byWd[new Date(k + 'T12:00').getDay()] += v);
+  const top = Math.max(...byWd);
+  $('topDay').textContent = top ? ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][byWd.indexOf(top)] : '–';
+}
+
+// ---------- toy status / test connection ----------
+async function checkToy() {
+  $('stMic').innerHTML = SR ? '<span class="ok"><span class="dot"></span>Ready</span>' : '<span class="bad">Type only</span>';
+  try {
+    const h = await (await call('/api/health')).json();
+    $('stBrain').innerHTML = '<span class="ok"><span class="dot"></span>Online</span>';
+    $('stModel').textContent = h.model;
+    $('stVoice').textContent = h.voice === 'kokoro' ? 'Kokoro' : 'Browser';
+    return h;
+  } catch {
+    $('stBrain').innerHTML = '<span class="bad"><span class="dot"></span>Offline</span>';
+    $('stModel').textContent = '–'; $('stVoice').textContent = 'Browser';
+  }
+}
+$('testBtn').onclick = async () => {
+  $('testMsg').textContent = 'Testing…';
+  if (!await checkToy()) { $('testMsg').innerHTML = '<span class="bad">Server not reachable. Check Settings → Connection.</span>'; return; }
+  const t0 = performance.now();
+  try {
+    const r = await call('/api/chat', {messages: [{role: 'user', content: 'Say a short happy hello to show you are connected.'}], profile: {level: S.level}});
+    const {reply} = await r.json();
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    $('testMsg').innerHTML = r.ok ? `<span class="ok">✓ Working · ${secs}s</span>` : `<span class="bad">✗ ${r.status === 401 ? 'Wrong access code' : 'AI error'}</span>`;
+    if (r.ok) { messages = []; $('chat').innerHTML = ''; say(reply); }
+  } catch { $('testMsg').innerHTML = '<span class="bad">AI did not answer</span>'; }
+};
+</script>
+</body>
+</html>
