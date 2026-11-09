@@ -126,6 +126,7 @@ def chat_messages(body):
 def cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-App-Token"
+    resp.headers["Access-Control-Allow-Private-Network"] = "true"  # lets the GitHub Pages site call this laptop's localhost
     return resp
 
 
@@ -145,7 +146,8 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return jsonify(ok=True, model=LLM_MODEL, voice="kokoro" if kokoro() else "browser", token_required=bool(APP_TOKEN))
+    return jsonify(ok=True, model=LLM_MODEL, voice="kokoro" if kokoro() else "browser",
+                   stt="whisper" if whisper() else "browser", token_required=bool(APP_TOKEN))
 
 
 @app.post("/api/chat")
@@ -153,7 +155,7 @@ def chat():
     body = request.get_json(silent=True) or {}
     msgs = chat_messages(body)
     if msgs[-1]["role"] == "user" and UNSAFE.search(msgs[-1]["content"]):
-        return jsonify(reply=SAFE_REPLY)
+        return Response(SAFE_REPLY + "\n", mimetype="text/plain") if body.get("stream") else jsonify(reply=SAFE_REPLY)
     story = (body.get("profile") or {}).get("focus") == "story"
     payload = {
         "model": LLM_MODEL,
@@ -165,6 +167,8 @@ def chat():
     headers = {"Content-Type": "application/json"}
     if LLM_KEY:
         headers["Authorization"] = f"Bearer {LLM_KEY}"
+    if body.get("stream"):
+        return Response(stream_sentences(payload, headers, 6 if story else 3), mimetype="text/plain")
     req = urllib.request.Request(LLM_URL, json.dumps(payload).encode(), headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
@@ -177,6 +181,45 @@ def chat():
     return jsonify(reply=short(reply, 6 if story else 3) or "Hmm, can you say that again?")
 
 
+def stream_sentences(payload, headers, max_sentences):
+    """Yield the reply one finished sentence per line, so the voice can start on sentence 1
+    while the model is still writing sentence 2. Same cleaning + safety filter as /api/chat."""
+    req = urllib.request.Request(LLM_URL, json.dumps({**payload, "stream": True}).encode(), headers)
+    buf, sent = "", 0
+
+    def emit(sentence):
+        s = clean(sentence)
+        if not s:
+            return None
+        return SAFE_REPLY if UNSAFE.search(s) else s
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            for line in r:
+                line = line.decode("utf-8", "ignore").strip()
+                if not line.startswith("data:") or line.endswith("[DONE]"):
+                    continue
+                delta = (json.loads(line[5:])["choices"][0].get("delta") or {}).get("content") or ""
+                buf += delta
+                while m := re.search(r"[.!?]+\s", buf):  # sentence is finished once the next space arrives
+                    sentence, buf = buf[: m.end()], buf[m.end():]
+                    s = emit(sentence)
+                    if s:
+                        yield s + "\n"
+                        sent += 1
+                        if s == SAFE_REPLY or sent >= max_sentences:
+                            return
+            s = emit(buf)
+            if s and sent < max_sentences:
+                yield s + "\n"
+            elif not sent:
+                yield "Hmm, can you say that again?\n"
+    except Exception as e:
+        app.logger.error("LLM stream error: %s", e)
+        if not sent:
+            yield "Oops, my brain is taking a nap. Can you try again?\n"
+
+
 _kokoro = None
 
 
@@ -185,8 +228,15 @@ def kokoro():
     global _kokoro
     if _kokoro is None:
         try:
+            import onnxruntime
+            try:  # GPU voice: ~0.14s per sentence vs ~0.6s on CPU. onnxruntime falls back to CPU by itself if CUDA is missing.
+                onnxruntime.preload_dlls()  # loads CUDA/cuDNN from the nvidia-* pip packages
+                os.environ.setdefault("ONNX_PROVIDER", "CUDAExecutionProvider")
+            except Exception:
+                pass
             from kokoro_onnx import Kokoro
             _kokoro = Kokoro(str(KOKORO_DIR / "onnx/model.onnx"), str(KOKORO_DIR / "voices-v1.0.bin"))
+            _kokoro.create("Ready.", voice=VOICE, speed=1.0, lang="en-us")  # warm-up: first run is slow
         except Exception:
             _kokoro = False
     return _kokoro or None
@@ -213,6 +263,47 @@ def tts():
     return Response(buf.getvalue(), mimetype="audio/wav")
 
 
+_whisper = None
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
+
+
+def whisper():
+    """Local speech-to-text (faster-whisper). None when not installed -> the browser's recognizer is used."""
+    global _whisper
+    if _whisper is None:
+        try:
+            from faster_whisper import WhisperModel
+            for device, ctype in (("cuda", "float16"), ("cpu", "int8")):
+                try:  # cached copy first: no network needed (and the laptop's proxy is often down)
+                    _whisper = WhisperModel(WHISPER_MODEL, device=device, compute_type=ctype, local_files_only=True)
+                    break
+                except Exception:
+                    continue
+            else:
+                _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")  # downloads the model
+        except Exception:
+            _whisper = False
+    return _whisper or None
+
+
+@app.post("/api/stt")
+def stt():
+    w = whisper()
+    if not w:
+        return jsonify(error="no whisper on this server"), 501
+    audio = request.get_data()
+    if not audio or len(audio) > 5_000_000:  # ~5 MB = way more than a child's sentence
+        return jsonify(error="bad audio"), 400
+    try:
+        segments, _ = w.transcribe(io.BytesIO(audio), language="en", beam_size=1, vad_filter=True,
+                                   initial_prompt="Hello Puffy Pal!")  # primes the toy's name
+        text = " ".join(s.text.strip() for s in segments).strip()
+    except Exception as e:
+        app.logger.error("STT error: %s", e)
+        return jsonify(error="could not read audio"), 400
+    return jsonify(text=text)
+
+
 def warm_ollama():
     """Load the model now and keep it in GPU memory, so the child never waits ~4s for a cold start."""
     if ":11434" not in LLM_URL:
@@ -228,4 +319,5 @@ def warm_ollama():
 if __name__ == "__main__":
     warm_ollama()
     kokoro()  # warm up so the first reply isn't slow
+    whisper()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
