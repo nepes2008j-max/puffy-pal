@@ -21,7 +21,8 @@ os.environ["STT_URL"] = "https://api.groq.com/openai/v1/audio/transcriptions"
 # Settings -> Connection -> Access code. Stops strangers who find the address from using your Groq quota.
 # os.environ["APP_TOKEN"] = "pick-a-secret-word"
 
-# Only this site may use the API (plus a per-visitor limit of 40 AI requests a minute, built in).
+# Browsers on other websites are blocked, and each visitor gets at most 40 AI requests a minute.
+# Scripts can still call the API directly: set APP_TOKEN above if you need it fully private.
 os.environ["ALLOWED_HOSTS"] = f"{USERNAME}.pythonanywhere.com"
 os.environ["TRUSTED_IP_HEADER"] = "X-Real-IP"  # set by PythonAnywhere's proxy, used for the rate limit
 os.environ["ALLOWED_ORIGINS"] = f"https://{USERNAME}.pythonanywhere.com,https://nepes2008j-max.github.io"

@@ -7,6 +7,7 @@ Both speak the OpenAI chat-completions format, so only env vars change.
 import hmac
 import io
 import json
+import math
 import os
 import re
 import time
@@ -330,9 +331,18 @@ def kokoro():
     return _kokoro or None
 
 
+def safe_speed(value):
+    """Voice speed from the client: any junk (text, NaN, inf) becomes the default 0.9, then clamped to 0.6-1.3."""
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return 0.9
+    return min(max(v, 0.6), 1.3) if math.isfinite(v) else 0.9
+
+
 def wav_bytes(k, text, speed):
     import numpy as np
-    samples, rate = k.create(text, voice=VOICE, speed=min(max(float(speed or 0.9), 0.6), 1.3), lang="en-us")
+    samples, rate = k.create(text, voice=VOICE, speed=safe_speed(speed), lang="en-us")
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
@@ -346,7 +356,7 @@ def mp3_bytes(k, text, speed):
     """Voice as 48 kbps MP3: ~8x smaller than WAV (matters on phones), plays in every browser, ~15 ms to encode."""
     import av
     import numpy as np
-    samples, rate = k.create(text, voice=VOICE, speed=min(max(float(speed or 0.9), 0.6), 1.3), lang="en-us")
+    samples, rate = k.create(text, voice=VOICE, speed=safe_speed(speed), lang="en-us")
     buf = io.BytesIO()
     with av.open(buf, "w", format="mp3") as out:
         st = out.add_stream("libmp3lame", rate=rate)
