@@ -184,6 +184,7 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
   <div class="card" style="padding:4px 16px">
     <label class="row"><span class="t"><b>Gentle Help</b><small>Extra kind and supportive replies</small></span><input type="checkbox" class="tog" data-k="gentle"></label>
     <label class="row"><span class="t"><b>Voice speed</b><small id="speedVal"></small></span><input type="range" min="0.7" max="1.2" step="0.05" data-k="speed" style="width:45%;accent-color:var(--purple)"></label>
+    <label class="row"><span class="t"><b>Volume</b><small>Puffy Pal's voice</small></span><input type="range" min="0.1" max="1" step="0.1" data-k="volume" style="width:45%;accent-color:var(--purple)"></label>
   </div>
   <p class="label" id="sleepCard">Sleep mode</p>
   <div class="card" style="padding:4px 16px">
@@ -222,9 +223,11 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
 
 <script>
 // When hosted on GitHub Pages, put your PythonAnywhere URL here (or set it in Settings → Connection).
+// Until then the GitHub Pages site uses the server running on this same laptop (localhost:5000).
 const HOSTED_API = 'https://YOUR-USERNAME.pythonanywhere.com';
-const DEFAULT_API = location.hostname.endsWith('github.io') ? HOSTED_API
-  : location.protocol === 'file:' ? 'http://localhost:5000' : location.origin;
+const LOCAL_API = 'http://localhost:5000';
+const DEFAULT_API = location.hostname.endsWith('github.io') ? (HOSTED_API.includes('YOUR-USERNAME') ? LOCAL_API : HOSTED_API)
+  : location.protocol === 'file:' ? LOCAL_API : location.origin;
 
 const LEVELS = [
   ['beginner', 'Beginner (4–5 yrs)', 'Simple words and short sentences'],
@@ -237,21 +240,31 @@ const FOCUS = [['mixed','Mixed Learning'],['english','English Practice'],['conve
 
 // ---------- state: localStorage, this device only ----------
 const DEFAULTS = {child:{name:'',age:'',hobbies:'',lang:''}, parent:{name:'',email:''}, level:'elementary', focus:'mixed',
-  levelPicked:false, gentle:true, speed:0.9, sleep:{on:false,from:'20:30',to:'07:00'}, usage:{}, api:'', token:''};
+  levelPicked:false, gentle:true, speed:0.9, volume:1, sleep:{on:false,from:'20:30',to:'07:00'}, usage:{}, api:'', token:''};
 let S = structuredClone(DEFAULTS);
 try { Object.assign(S, JSON.parse(localStorage.getItem('puffypal') || '{}')); } catch {}
 const save = () => { try { localStorage.setItem('puffypal', JSON.stringify(S)); } catch {} };
+{ // ?api=https://… in the link sets the server (handy for phones / tunnels), then is removed from the address bar
+  const q = new URLSearchParams(location.search).get('api');
+  if (q && /^https?:\/\//.test(q)) { S.api = q; save(); history.replaceState(null, '', location.pathname); }
+}
 const get = k => k.split('.').reduce((o, p) => o?.[p], S);
 const set = (k, v) => { const ps = k.split('.'), last = ps.pop(); ps.reduce((o, p) => o[p] ??= {}, S)[last] = v; save(); };
 const api = () => (S.api || DEFAULT_API).replace(/\/$/, '');
 const $ = id => document.getElementById(id);
 const dayKey = d => d.toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
 
-const call = (path, body) => fetch(api() + path, {
-  method: body ? 'POST' : 'GET',
-  headers: {'Content-Type': 'application/json', ...(S.token ? {'X-App-Token': S.token} : {})},
-  body: body && JSON.stringify(body),
-});
+const call = (path, body) => {
+  const raw = body instanceof Blob;
+  return fetch(api() + path, {
+    method: body ? 'POST' : 'GET',
+    headers: {...(raw ? {} : {'Content-Type': 'application/json'}), ...(S.token ? {'X-App-Token': S.token} : {})},
+    body: raw ? body : body && JSON.stringify(body),
+  });
+};
+let SERVER = {}; // what the backend offers: {voice:'kokoro'|'browser', stt:'whisper'|'browser', model}
+const refreshServer = async () => { try { SERVER = await (await call('/api/health')).json(); } catch { SERVER = {}; } return SERVER; };
+refreshServer();
 
 // ---------- navigation ----------
 let current = 'home';
@@ -309,7 +322,7 @@ $('resetBtn').onclick = () => {
 
 // ---------- talk ----------
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-const IDLE = SR ? 'Tap the button and talk' : 'Type your message below';
+const idle = () => SERVER.stt === 'whisper' || SR ? 'Tap the button and talk' : 'Type your message below';
 let messages = [], rec = null, audio = null, busy = false;
 
 function asleep() {
@@ -317,12 +330,13 @@ function asleep() {
   const n = new Date().toTimeString().slice(0, 5), {from, to} = S.sleep;
   return from > to ? (n >= from || n < to) : (n >= from && n < to);
 }
-function enterTalk() {
+async function enterTalk() {
+  if (!SERVER.ok) await refreshServer(); // server may have been started after the page loaded
   const sleeping = asleep();
   $('sleeping').hidden = !sleeping;
   $('composer').hidden = $('chat').hidden = sleeping;
   $('talkName').textContent = S.child.name ? `Hi, ${S.child.name}!` : 'Puffy Pal';
-  mood('', sleeping ? '' : IDLE);
+  mood('', sleeping ? '' : idle());
   if (!sleeping && !messages.length) say(`Hi${S.child.name ? ' ' + S.child.name : ''}! I'm Puffy Pal. What do you want to talk about today?`);
 }
 function bubble(role, text) {
@@ -346,30 +360,83 @@ async function send(text) {
   busy = false;
   if (current === 'talk') say(reply);
 }
+let speakId = 0; // bumped by stopAll() so an old reply stops talking
 async function say(text) {
   messages.push({role: 'assistant', content: text}); bubble('assistant', text);
   mood('speaking', 'Puffy Pal is talking…');
-  const done = () => mood('', IDLE);
-  try {
-    const r = await call('/api/tts', {text, speed: S.speed});
-    if (!r.ok) throw 0;
-    audio = new Audio(URL.createObjectURL(await r.blob()));
-    audio.onended = done;
-    await audio.play();
-  } catch { // server has no Kokoro (e.g. PythonAnywhere) -> browser voice
+  await speak(text);
+  if ($('pal').classList.contains('speaking')) mood('', idle());
+}
+function browserSpeak(text) {
+  return new Promise(res => {
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'en-US'; u.rate = S.speed; u.pitch = 1.2; u.onend = done;
+    u.lang = 'en-US'; u.rate = S.speed; u.pitch = 1.2; u.volume = S.volume; u.onend = u.onerror = res;
     speechSynthesis.cancel(); speechSynthesis.speak(u);
+  });
+}
+const ttsUrl = t => call('/api/tts', {text: t, speed: S.speed}).then(r => r.ok ? r.blob() : null).then(b => b && URL.createObjectURL(b)).catch(() => null);
+const play = url => new Promise(res => { audio = new Audio(url); audio.volume = S.volume; audio.onended = audio.onerror = res; audio.play().catch(res); });
+async function speak(text) {
+  const id = ++speakId;
+  if (SERVER.voice !== 'kokoro') return browserSpeak(text);
+  // Say the first sentence as soon as it's ready while the rest is still being voiced.
+  const sentences = text.match(/[^.!?]+[.!?]*/g)?.map(s => s.trim()).filter(Boolean) || [text];
+  const parts = [sentences[0], sentences.slice(1).join(' ')].filter(Boolean);
+  let next = ttsUrl(parts[0]);
+  for (let i = 0; i < parts.length; i++) {
+    const url = await next;
+    if (id !== speakId) return;
+    if (i + 1 < parts.length) next = ttsUrl(parts[i + 1]);
+    if (!url) return browserSpeak(parts.slice(i).join(' '));
+    await play(url);
+    if (id !== speakId) return;
   }
 }
 function stopAll() {
-  audio?.pause(); speechSynthesis.cancel(); rec?.abort(); rec = null;
+  speakId++; audio?.pause(); speechSynthesis.cancel();
+  rec?.abort(); rec = null;
+  if (recorder?.state === 'recording') { recorder.cancelled = true; recorder.stop(); }
   $('mic').classList.remove('live');
 }
-$('mic').onclick = () => {
+
+// --- microphone: local Whisper on the server when available, otherwise the browser's recognizer ---
+const LOUD = 12;          // mic level (0-128) that counts as speech; raise it in a noisy room
+const SILENCE_MS = 1200;  // stop after this much quiet once the child has spoken
+let recorder = null;
+async function recordForWhisper() {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true}}); }
+  catch { mood('', 'Please allow the microphone'); return; }
+  const chunks = [], ctx = new AudioContext(), an = ctx.createAnalyser(), buf = new Uint8Array(1024);
+  an.fftSize = 1024; ctx.createMediaStreamSource(stream).connect(an);
+  let heard = false; const start = performance.now(); let quietSince = start;
+  recorder = new MediaRecorder(stream);
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = async () => {
+    const r = recorder; recorder = null;
+    stream.getTracks().forEach(t => t.stop()); ctx.close(); $('mic').classList.remove('live');
+    if (r.cancelled) return;
+    if (!heard) { mood('', "I didn't hear you. Tap and try again!"); return; }
+    mood('thinking', 'Puffy Pal is listening…');
+    try {
+      const res = await call('/api/stt', new Blob(chunks, {type: r.mimeType}));
+      const {text} = await res.json();
+      text ? send(text) : mood('', "I didn't catch that. Try again!");
+    } catch { mood('', "I can't hear right now. Ask a grown-up to check the connection."); }
+  };
+  (function watch() { // stop by itself when the child finishes talking
+    if (!recorder || recorder.state !== 'recording') return;
+    an.getByteTimeDomainData(buf);
+    let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+    const now = performance.now();
+    if (peak > LOUD) { heard = true; quietSince = now; }
+    if ((heard && now - quietSince > SILENCE_MS) || now - start > 15000 || (!heard && now - start > 7000)) return recorder.stop();
+    requestAnimationFrame(watch);
+  })();
+  recorder.start(); $('mic').classList.add('live'); mood('', "I'm listening… talk now!");
+}
+function recordWithBrowser() {
   if (!SR) { $('text').focus(); mood('', 'Voice works in Chrome or Edge — please type here'); return; }
-  if (rec) { rec.stop(); return; }
-  stopAll();
   rec = new SR(); rec.lang = 'en-US'; rec.interimResults = true;
   rec.onresult = e => {
     const t = [...e.results].map(r => r[0].transcript).join('');
@@ -377,8 +444,15 @@ $('mic').onclick = () => {
     if (e.results[e.results.length - 1].isFinal) { $('text').value = ''; send(t); }
   };
   rec.onerror = e => mood('', e.error === 'not-allowed' ? 'Please allow the microphone' : "I didn't hear you. Try again!");
-  rec.onend = () => { rec = null; $('mic').classList.remove('live'); if ($('state').textContent === "I'm listening…") mood('', IDLE); };
-  rec.start(); $('mic').classList.add('live'); mood('', "I'm listening…");
+  rec.onend = () => { rec = null; $('mic').classList.remove('live'); if ($('state').textContent.startsWith("I'm listening")) mood('', idle()); };
+  rec.start(); $('mic').classList.add('live'); mood('', "I'm listening… talk now!");
+}
+$('mic').onclick = () => {
+  if (recorder?.state === 'recording') return recorder.stop(); // second tap = done talking
+  if (rec) return rec.stop();
+  if (busy) return;
+  stopAll();
+  SERVER.stt === 'whisper' ? recordForWhisper() : recordWithBrowser();
 };
 $('composer').onsubmit = e => { e.preventDefault(); send($('text').value); $('text').value = ''; };
 
@@ -420,17 +494,13 @@ function drawHistory() {
 
 // ---------- toy status / test connection ----------
 async function checkToy() {
-  $('stMic').innerHTML = SR ? '<span class="ok"><span class="dot"></span>Ready</span>' : '<span class="bad">Type only</span>';
-  try {
-    const h = await (await call('/api/health')).json();
-    $('stBrain').innerHTML = '<span class="ok"><span class="dot"></span>Online</span>';
-    $('stModel').textContent = h.model;
-    $('stVoice').textContent = h.voice === 'kokoro' ? 'Kokoro' : 'Browser';
-    return h;
-  } catch {
-    $('stBrain').innerHTML = '<span class="bad"><span class="dot"></span>Offline</span>';
-    $('stModel').textContent = '–'; $('stVoice').textContent = 'Browser';
-  }
+  const h = await refreshServer();
+  const okTxt = t => `<span class="ok"><span class="dot"></span>${t}</span>`;
+  $('stMic').innerHTML = h.stt === 'whisper' ? okTxt('Whisper') : SR ? okTxt('Browser') : '<span class="bad">Type only</span>';
+  $('stVoice').textContent = h.voice === 'kokoro' ? 'Kokoro' : 'Browser';
+  $('stModel').textContent = h.model || '–';
+  $('stBrain').innerHTML = h.ok ? okTxt('Online') : '<span class="bad"><span class="dot"></span>Offline</span>';
+  return h.ok && h;
 }
 $('testBtn').onclick = async () => {
   $('testMsg').textContent = 'Testing…';
