@@ -18,12 +18,16 @@ LLM_URL = os.environ.get("LLM_URL", "http://localhost:11434/v1/chat/completions"
 LLM_MODEL = os.environ.get("LLM_MODEL", "toy-brain")
 LLM_KEY = os.environ.get("LLM_KEY", "")
 APP_TOKEN = os.environ.get("APP_TOKEN", "")  # if set, the web app must send it (stops strangers burning your API credit)
-ALLOWED_ORIGIN = os.environ.get("ALLOWED_ORIGIN", "*")  # set to https://<you>.github.io in production
+# Only these web pages may call the API (stops any random site you visit from using your laptop's AI/mic transcription).
+ALLOWED_ORIGINS = set(os.environ.get(
+    "ALLOWED_ORIGINS", "https://nepes2008j-max.github.io,http://localhost:5000,http://127.0.0.1:5000").split(","))
 KOKORO_DIR = Path(os.environ.get("KOKORO_DIR", Path.home() / "Desktop/ai/kokoro"))
 VOICE = os.environ.get("VOICE", "af_heart")
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "docs"
 app = Flask(__name__, static_folder=str(WEB_DIR), static_url_path="")
+app.config["MAX_CONTENT_LENGTH"] = 5_000_000  # rejects huge uploads before reading them
+MAX_AUDIO_SECONDS = 20
 
 LEVELS = {
     "beginner": "a beginner (age 4-5). Use only very common words, 3-6 word sentences, present tense.",
@@ -124,9 +128,12 @@ def chat_messages(body):
 
 @app.after_request
 def cors(resp):
-    resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-App-Token"
-    resp.headers["Access-Control-Allow-Private-Network"] = "true"  # lets the GitHub Pages site call this laptop's localhost
+    origin = request.headers.get("Origin", "")
+    if origin in ALLOWED_ORIGINS:
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-App-Token"
+        resp.headers["Access-Control-Allow-Private-Network"] = "true"  # lets the GitHub Pages site reach this laptop's localhost
+        resp.headers["Vary"] = "Origin"
     return resp
 
 
@@ -134,6 +141,9 @@ def cors(resp):
 def guard():
     if request.method == "OPTIONS":
         return Response(status=204)
+    origin = request.headers.get("Origin")
+    if origin and origin not in ALLOWED_ORIGINS and request.path.startswith("/api/"):
+        return jsonify(error="origin not allowed"), 403  # browsers send Origin; curl/scripts on this machine don't
     if request.path.startswith("/api/") and request.path != "/api/health" and APP_TOKEN \
             and request.headers.get("X-App-Token") != APP_TOKEN:
         return jsonify(error="bad access code"), 401
@@ -291,11 +301,15 @@ def stt():
     w = whisper()
     if not w:
         return jsonify(error="no whisper on this server"), 501
-    audio = request.get_data()
-    if not audio or len(audio) > 5_000_000:  # ~5 MB = way more than a child's sentence
+    audio = request.get_data()  # MAX_CONTENT_LENGTH already capped the size
+    if not audio:
         return jsonify(error="bad audio"), 400
     try:
-        segments, _ = w.transcribe(io.BytesIO(audio), language="en", beam_size=1, vad_filter=True,
+        from faster_whisper import decode_audio
+        samples = decode_audio(io.BytesIO(audio))  # 16 kHz mono
+        if len(samples) > MAX_AUDIO_SECONDS * 16000:
+            return jsonify(error="too long"), 400
+        segments, _ = w.transcribe(samples, language="en", beam_size=1, vad_filter=True,
                                    initial_prompt="Hello Puffy Pal!")  # primes the toy's name
         text = " ".join(s.text.strip() for s in segments).strip()
     except Exception as e:
@@ -320,4 +334,5 @@ if __name__ == "__main__":
     warm_ollama()
     kokoro()  # warm up so the first reply isn't slow
     whisper()
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    # 127.0.0.1 = only this laptop can connect. Set HOST=0.0.0.0 to let phones on your Wi-Fi in.
+    app.run(host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", 5000)), threaded=True)

@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Puffy Pal</title>
 <link rel="icon" href="monkey.png">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#5B3CC4">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -75,7 +79,8 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
 @media (prefers-reduced-motion:reduce){.pal{animation:none!important}}
 @media (max-height:640px){.pal{width:90px;height:100px}.screen#talk{padding-top:12px}}
 .state{text-align:center;color:var(--purple);font-weight:500;min-height:22px}
-.app:has(#talk.on){padding-bottom:16px} .app:has(#talk.on) nav{display:none}
+.app:has(#talk.on),.app:has(#welcome.on){padding-bottom:16px} .app:has(#talk.on) nav,.app:has(#welcome.on) nav{display:none}
+dialog{margin:auto} dialog::backdrop{background:#1e1b2e88}
 .chat{height:calc(100dvh - 330px);min-height:140px;overflow-y:auto;padding:8px 2px;display:flex;flex-direction:column;gap:8px}
 .msg{max-width:82%;padding:10px 14px;border-radius:18px;font-size:16px}
 .msg.user{align-self:flex-end;background:var(--purple);color:#fff;border-bottom-right-radius:6px}
@@ -151,10 +156,10 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
     <button class="row" data-go="settings" data-anchor="sleepCard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20 14A8 8 0 1 1 10 4a6 6 0 0 0 10 10z"/></svg><span class="t"><b>Sleep Mode</b><small>Manage quiet hours</small></span><span class="chev">›</span></button>
     <button class="row" id="testBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 12a8 8 0 0 1 16 0M8 12a4 4 0 0 1 8 0"/><circle cx="12" cy="12" r="1.5"/></svg><span class="t"><b>Test Connection</b><small id="testMsg">Check toy response</small></span><span class="chev">›</span></button>
   </div>
-  <div class="card" style="display:flex;align-items:center;gap:12px">
-    <div style="flex:1"><b style="color:var(--purple)">♥ About Puffy Pal</b><p class="sub" style="text-align:left;font-size:13px">Personalized learning for your little explorer!</p></div>
+  <button class="card" data-go="about" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left">
+    <span style="flex:1"><b style="color:var(--purple)">♥ About Puffy Pal</b><span class="sub" style="display:block;text-align:left;font-size:13px">Personalized learning for your little explorer!</span></span>
     <img src="monkey.png" alt="" width="70">
-  </div>
+  </button>
 </section>
 
 <section class="screen" id="profile">
@@ -192,6 +197,17 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
     <label class="row"><span class="t">Sleep at</span><input type="time" data-k="sleep.from"></label>
     <label class="row"><span class="t">Wake up at</span><input type="time" data-k="sleep.to"></label>
   </div>
+  <p class="label">Reminders</p>
+  <div class="card" style="padding:4px 16px">
+    <div id="reminderList"></div>
+    <form class="row" id="reminderForm" style="flex-wrap:wrap">
+      <input type="time" id="remTime" required aria-label="Reminder time" style="border:0;font:inherit;background:var(--purple-soft);border-radius:8px;padding:6px">
+      <input id="remText" required maxlength="140" placeholder="It's time to brush your teeth!" aria-label="Reminder message" style="flex:1;min-width:150px;border:0;font:inherit;padding:6px">
+      <button class="chip on">Add</button>
+    </form>
+    <p class="sub" style="text-align:left;font-size:12px;padding:0 0 10px">Puffy Pal says it out loud at that time while the app is open.</p>
+  </div>
+
   <p class="label">Connection (for grown-ups)</p>
   <div class="card" style="padding:4px 16px">
     <label class="row"><span class="t">Server</span><input data-k="api" id="apiInput"></label>
@@ -212,6 +228,48 @@ nav button.on{color:var(--purple)} nav button.on i{background:var(--purple);colo
   </div>
   <button class="primary" data-go="talk">Start talking</button>
 </section>
+
+<section class="screen" id="welcome">
+  <h1 class="brand">Puffy Pal</h1>
+  <div class="hero" style="width:180px;height:216px;margin:14px auto"><img src="monkey.png" alt="Puffy Pal the monkey"></div>
+  <h2 style="margin-bottom:6px">Welcome to Puffy Pal!</h2>
+  <p class="sub" style="margin-bottom:16px">Tell us about your child so Puffy Pal can talk just right.</p>
+  <form class="card" id="welcomeForm" style="padding:4px 16px">
+    <label class="row"><span class="t">Child's name</span><input id="wName" required maxlength="40" placeholder="Tommy" autocomplete="off"></label>
+    <label class="row"><span class="t">Age</span><input id="wAge" type="number" min="3" max="13" required placeholder="6"></label>
+    <label class="row"><span class="t">Hobbies</span><input id="wHobbies" maxlength="120" placeholder="Space & dinosaurs"></label>
+    <label class="row"><span class="t">Home language</span><input id="wLang" maxlength="30" placeholder="English"></label>
+    <button class="primary" style="margin:12px 0">Get started</button>
+  </form>
+  <p class="hint">Saved only on this device. You can change it later in Profile.</p>
+</section>
+
+<section class="screen guide" id="about">
+  <div class="talk-top"><button class="back" data-go="toy" aria-label="Back">‹</button><h2 style="margin:0">About Puffy Pal</h2><span style="width:40px"></span></div>
+  <div class="card" style="display:flex;gap:12px;align-items:center">
+    <span style="flex:1"><b style="color:var(--purple);font-size:18px">The plush that grows with your child</b></span>
+    <img src="monkey.png" alt="" width="80">
+  </div>
+  <div class="card">
+    <p><b>🗣 Speaks with them.</b> Natural voice conversations that build English confidence, every day.</p>
+    <p><b>💜 Builds emotional confidence.</b> Patient, kind and encouraging, never judging mistakes.</p>
+    <p><b>🧩 Plays with purpose.</b> Stories, questions and homework hints matched to your child's age and level.</p>
+    <p><b>📊 You stay in control.</b> Sleep mode, reminders, learning focus and usage history in the parent app.</p>
+    <p class="sub" style="text-align:left">Made for children aged 4–12 in English-speaking and international families.</p>
+  </div>
+</section>
+
+<dialog id="gate" style="border:0;border-radius:20px;padding:20px;max-width:320px">
+  <form method="dialog" id="gateForm">
+    <h2 style="margin-bottom:6px">For grown-ups</h2>
+    <p class="sub" style="margin-bottom:12px">Please answer to continue.</p>
+    <p style="font:600 24px Inter;text-align:center" id="gateQ"></p>
+    <input id="gateA" type="number" inputmode="numeric" aria-label="Answer" style="width:100%;font:inherit;font-size:20px;text-align:center;padding:10px;border:2px solid var(--line);border-radius:12px;margin:10px 0">
+    <p class="bad" id="gateErr" style="min-height:20px;text-align:center"></p>
+    <div style="display:flex;gap:10px"><button value="cancel" class="danger" style="flex:1" formnovalidate>Cancel</button><button value="ok" class="primary" style="flex:1">OK</button></div>
+  </form>
+</dialog>
+<div id="toast" role="status" style="position:fixed;top:14px;left:50%;transform:translateX(-50%);background:var(--purple);color:#fff;padding:12px 18px;border-radius:16px;z-index:9;max-width:90%;display:none"></div>
 
 <nav id="nav">
   <button data-go="home" class="on"><i><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 2 12h3v8h5v-5h4v5h5v-8h3z"/></svg></i>Home</button>
@@ -240,14 +298,11 @@ const FOCUS = [['mixed','Mixed Learning'],['english','English Practice'],['conve
 
 // ---------- state: localStorage, this device only ----------
 const DEFAULTS = {child:{name:'',age:'',hobbies:'',lang:''}, parent:{name:'',email:''}, level:'elementary', focus:'mixed',
-  levelPicked:false, gentle:true, speed:0.9, volume:1, sleep:{on:false,from:'20:30',to:'07:00'}, usage:{}, api:'', token:''};
+  levelPicked:false, gentle:true, speed:0.9, volume:1, sleep:{on:false,from:'20:30',to:'07:00'}, usage:{}, api:'', token:'',
+  reminders:[], onboarded:false};
 let S = structuredClone(DEFAULTS);
 try { Object.assign(S, JSON.parse(localStorage.getItem('puffypal') || '{}')); } catch {}
 const save = () => { try { localStorage.setItem('puffypal', JSON.stringify(S)); } catch {} };
-{ // ?api=https://… in the link sets the server (handy for phones / tunnels), then is removed from the address bar
-  const q = new URLSearchParams(location.search).get('api');
-  if (q && /^https?:\/\//.test(q)) { S.api = q; save(); history.replaceState(null, '', location.pathname); }
-}
 const get = k => k.split('.').reduce((o, p) => o?.[p], S);
 const set = (k, v) => { const ps = k.split('.'), last = ps.pop(); ps.reduce((o, p) => o[p] ??= {}, S)[last] = v; save(); };
 const api = () => (S.api || DEFAULT_API).replace(/\/$/, '');
@@ -268,7 +323,10 @@ refreshServer();
 
 // ---------- navigation ----------
 let current = 'home';
+const GROWNUP_ONLY = ['settings', 'profile'];
+let grownupUntil = 0; // after one correct answer, grown-up screens stay open for 10 minutes
 function go(id, anchor) {
+  if (GROWNUP_ONLY.includes(id) && Date.now() > grownupUntil) return askGrownup(() => go(id, anchor));
   document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id));
   document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('on', b.dataset.go === id));
   if (id !== 'talk') stopAll();
@@ -280,6 +338,58 @@ document.addEventListener('click', e => {
   const b = e.target.closest('[data-go]');
   if (b) go(b.dataset.go, b.dataset.anchor);
 });
+
+// ---------- grown-up check (keeps kids out of settings; nothing to remember, unlike a PIN) ----------
+function askGrownup(then) {
+  const a = 6 + Math.floor(Math.random() * 7), b = 3 + Math.floor(Math.random() * 7); // e.g. 9 × 7
+  $('gateQ').textContent = `${a} × ${b} = ?`; $('gateA').value = ''; $('gateErr').textContent = '';
+  $('gate').onclose = null;
+  $('gateForm').onsubmit = e => {
+    if (e.submitter?.value !== 'ok') return; // Cancel closes the dialog
+    if (+$('gateA').value === a * b) { grownupUntil = Date.now() + 10 * 60e3; $('gate').onclose = then; }
+    else { e.preventDefault(); $('gateErr').textContent = 'Not quite, try again'; $('gateA').select(); }
+  };
+  $('gate').showModal(); $('gateA').focus();
+}
+
+// ---------- first-run welcome ----------
+$('welcomeForm').onsubmit = e => {
+  e.preventDefault();
+  Object.assign(S.child, {name: $('wName').value.trim(), age: $('wAge').value, hobbies: $('wHobbies').value.trim(), lang: $('wLang').value.trim()});
+  S.onboarded = true; save(); autoLevel();
+  document.querySelectorAll('[data-k^="child."]').forEach(el => el.value = get(el.dataset.k) ?? '');
+  go('home');
+};
+
+// ---------- reminders (spoken while the app is open) ----------
+const toast = t => { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast.h); toast.h = setTimeout(() => el.style.display = 'none', 8000); };
+function drawReminders() {
+  $('reminderList').innerHTML = '';
+  S.reminders.forEach((r, i) => {
+    const row = document.createElement('div'); row.className = 'row';
+    row.innerHTML = `<b style="font-weight:600;color:var(--purple)"></b><span class="t"></span><button class="chev" aria-label="Delete reminder">✕</button>`;
+    row.children[0].textContent = r.time; row.children[1].textContent = r.text;
+    row.children[2].onclick = () => { S.reminders.splice(i, 1); save(); drawReminders(); };
+    $('reminderList').append(row);
+  });
+}
+$('reminderForm').onsubmit = e => {
+  e.preventDefault();
+  S.reminders.push({time: $('remTime').value, text: $('remText').value.trim(), last: ''});
+  S.reminders.sort((a, b) => a.time.localeCompare(b.time)); save(); drawReminders();
+  $('remText').value = '';
+};
+setInterval(() => {
+  const now = new Date(), hm = now.toTimeString().slice(0, 5), today = dayKey(now);
+  for (const r of S.reminders) {
+    if (r.time === hm && r.last !== today) {
+      r.last = today; save();
+      const text = S.child.name && !r.text.includes(S.child.name) ? `${S.child.name}, ${r.text}` : r.text;
+      toast('⏰ ' + text);
+      current === 'talk' ? say(text) : speak(text);
+    }
+  }
+}, 15000);
 
 // ---------- profile + settings binding ----------
 $('apiInput').placeholder = DEFAULT_API;
@@ -314,6 +424,7 @@ $('focus').addEventListener('click', e => { const f = e.target.dataset.f; if (f)
 drawLevels(); drawFocus();
 
 $('resetBtn').onclick = () => {
+  if (Date.now() > grownupUntil) return askGrownup(() => $('resetBtn').click());
   if (confirm('Reset Puffy Pal? This clears the profile, settings and history on this device.')) {
     try { localStorage.removeItem('puffypal'); } catch {}
     location.reload();
@@ -550,6 +661,9 @@ $('testBtn').onclick = async () => {
     if (r.ok) { messages = []; $('chat').innerHTML = ''; say(reply); }
   } catch { $('testMsg').innerHTML = '<span class="bad">AI did not answer</span>'; }
 };
+// ---------- start ----------
+drawReminders();
+if (!S.onboarded && !S.child.name) go('welcome');
 </script>
 </body>
 </html>

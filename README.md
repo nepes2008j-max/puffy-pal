@@ -12,11 +12,16 @@ server/check.py   smoke test: speed, clean output, safety
 ## Run on the laptop (fastest: RTX 4060 + toy-brain + Kokoro)
 
 ```bash
-~/Desktop/ai/.venv/bin/python server/app.py     # open http://localhost:5000
-python3 server/check.py                         # every reply should take under 1.5s
+./start.sh            # starts the AI server and opens the live site (it talks to this laptop)
+./start.sh local      # same, but opens http://localhost:5000
+python3 server/check.py   # speed + safety + voice round-trip test
 ```
 
-Speech-to-text uses the browser's built-in recognition, so use Chrome or Edge. Typing works everywhere.
+While the laptop runs the server, https://nepes2008j-max.github.io/puffy-pal/ talks on this laptop.
+Speech: local Whisper (mic) → toy-brain (streamed) → Kokoro on the GPU, about 1 s from the child to the first sound.
+See [PLAN.md](PLAN.md) for what's done and what's next.
+
+Without Whisper on the server (e.g. PythonAnywhere), the browser's own speech recognition is used (Chrome/Edge).
 
 ## Put it online 24/7
 
@@ -32,7 +37,7 @@ The site will be at `https://<you>.github.io/<repo>/`.
   os.environ["LLM_MODEL"] = "qwen/qwen3-32b"      # or another fast Groq model
   os.environ["LLM_KEY"] = "gsk_..."               # keep this secret: never put it in docs/
   os.environ["APP_TOKEN"] = "pick-a-code"         # the parent enters this in Settings → Connection
-  os.environ["ALLOWED_ORIGIN"] = "https://<you>.github.io"
+  os.environ["ALLOWED_ORIGINS"] = "https://nepes2008j-max.github.io"  # only this site may call the API
   ```
 - Kokoro doesn't fit on PythonAnywhere, so the app uses the browser's voice there automatically.
 

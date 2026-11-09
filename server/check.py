@@ -3,6 +3,7 @@ import json
 import re
 import sys
 import time
+import urllib.error
 import urllib.request
 
 BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:5000").rstrip("/")
@@ -18,6 +19,15 @@ def post(path, body):
 health = json.load(urllib.request.urlopen(BASE + "/api/health"))
 print("health:", health)
 assert health["ok"]
+
+# a random website must not be able to use the API from a visitor's browser
+evil = urllib.request.Request(BASE + "/api/chat", b"{}", {"Content-Type": "application/json", "Origin": "https://evil.example"})
+try:
+    urllib.request.urlopen(evil)
+    raise AssertionError("foreign origin was allowed")
+except urllib.error.HTTPError as e:
+    assert e.code == 403, e.code
+print("cors: foreign origin blocked")
 
 CASES = [
     ({"name": "Tommy", "age": "5", "level": "beginner", "focus": "english"}, "hello puffy pal!"),
