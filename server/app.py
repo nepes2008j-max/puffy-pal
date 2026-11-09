@@ -126,6 +126,7 @@ def chat_messages(body):
 def cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = ALLOWED_ORIGIN
     resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-App-Token"
+    resp.headers["Access-Control-Allow-Private-Network"] = "true"  # lets the GitHub Pages site call this laptop's localhost
     return resp
 
 
@@ -145,7 +146,8 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return jsonify(ok=True, model=LLM_MODEL, voice="kokoro" if kokoro() else "browser", token_required=bool(APP_TOKEN))
+    return jsonify(ok=True, model=LLM_MODEL, voice="kokoro" if kokoro() else "browser",
+                   stt="whisper" if whisper() else "browser", token_required=bool(APP_TOKEN))
 
 
 @app.post("/api/chat")
@@ -213,6 +215,47 @@ def tts():
     return Response(buf.getvalue(), mimetype="audio/wav")
 
 
+_whisper = None
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base.en")
+
+
+def whisper():
+    """Local speech-to-text (faster-whisper). None when not installed -> the browser's recognizer is used."""
+    global _whisper
+    if _whisper is None:
+        try:
+            from faster_whisper import WhisperModel
+            for device, ctype in (("cuda", "float16"), ("cpu", "int8")):
+                try:  # cached copy first: no network needed (and the laptop's proxy is often down)
+                    _whisper = WhisperModel(WHISPER_MODEL, device=device, compute_type=ctype, local_files_only=True)
+                    break
+                except Exception:
+                    continue
+            else:
+                _whisper = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")  # downloads the model
+        except Exception:
+            _whisper = False
+    return _whisper or None
+
+
+@app.post("/api/stt")
+def stt():
+    w = whisper()
+    if not w:
+        return jsonify(error="no whisper on this server"), 501
+    audio = request.get_data()
+    if not audio or len(audio) > 5_000_000:  # ~5 MB = way more than a child's sentence
+        return jsonify(error="bad audio"), 400
+    try:
+        segments, _ = w.transcribe(io.BytesIO(audio), language="en", beam_size=1, vad_filter=True,
+                                   initial_prompt="Hello Puffy Pal!")  # primes the toy's name
+        text = " ".join(s.text.strip() for s in segments).strip()
+    except Exception as e:
+        app.logger.error("STT error: %s", e)
+        return jsonify(error="could not read audio"), 400
+    return jsonify(text=text)
+
+
 def warm_ollama():
     """Load the model now and keep it in GPU memory, so the child never waits ~4s for a cold start."""
     if ":11434" not in LLM_URL:
@@ -228,4 +271,5 @@ def warm_ollama():
 if __name__ == "__main__":
     warm_ollama()
     kokoro()  # warm up so the first reply isn't slow
+    whisper()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

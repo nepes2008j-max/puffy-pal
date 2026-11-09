@@ -38,5 +38,16 @@ for profile, text in CASES:
 
 audio, secs = post("/api/tts", {"text": "Hello! I'm connected and ready to play!", "speed": 0.9})
 print(f"tts: {len(audio)} bytes in {secs:.2f}s ({'kokoro wav' if audio[:4] == b'RIFF' else 'no kokoro'})")
+
+if health.get("stt") == "whisper" and audio[:4] == b"RIFF":
+    # round trip: Kokoro voice -> webm/opus (what the browser mic sends) -> Whisper
+    import subprocess
+    webm = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", "-", "-c:a", "libopus", "-f", "webm", "-"],
+                          input=audio, capture_output=True, check=True).stdout
+    req = urllib.request.Request(BASE + "/api/stt", webm, {"Content-Type": "audio/webm"})
+    t = time.time()
+    heard = json.load(urllib.request.urlopen(req, timeout=60))["text"]
+    print(f"stt: {time.time() - t:.2f}s -> {heard!r}")
+    assert "connected" in heard.lower(), "whisper should hear the sentence"
 assert slow == 0, f"{slow} replies took over 3s"
 print("OK")
