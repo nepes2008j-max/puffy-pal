@@ -23,6 +23,8 @@ from flask import Flask, Response, jsonify, request
 LLM_URL = os.environ.get("LLM_URL", "http://localhost:11434/v1/chat/completions")
 LLM_MODEL = os.environ.get("LLM_MODEL", "toy-brain")
 LLM_KEY = os.environ.get("LLM_KEY", "")
+# Groq sits behind Cloudflare, which blocks Python's default "Python-urllib" user-agent (error 1010).
+USER_AGENT = "PuffyPal/1.0"
 REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "none")  # set to "" for models without reasoning (e.g. Llama)
 APP_TOKEN = os.environ.get("APP_TOKEN", "")  # if set, the web app must send it (stops strangers burning your API credit)
 # Only these web pages may call the API (stops any random site you visit from using your laptop's AI/mic transcription).
@@ -243,7 +245,7 @@ def llm_request(body):
     }
     if REASONING_EFFORT:  # Qwen3: "none" skips "thinking" (~0.6s instead of seconds); other models may reject it
         payload["reasoning_effort"] = REASONING_EFFORT
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     if LLM_KEY:
         headers["Authorization"] = f"Bearer {LLM_KEY}"
     return payload, headers, 6 if story else 3
@@ -443,7 +445,8 @@ def cloud_transcribe(audio, ctype):
     parts.append(f'--{b}\r\nContent-Disposition: form-data; name="file"; filename="speech.{ext}"\r\n'
                  f'Content-Type: {ctype or "audio/webm"}\r\n\r\n'.encode() + audio + b"\r\n")
     req = urllib.request.Request(STT_URL, b"".join(parts) + f"--{b}--\r\n".encode(),
-                                 {"Content-Type": f"multipart/form-data; boundary={b}", "Authorization": f"Bearer {STT_KEY}"})
+                                 {"Content-Type": f"multipart/form-data; boundary={b}", "Authorization": f"Bearer {STT_KEY}",
+                                  "User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=30) as r:
         return (json.load(r).get("text") or "").strip()
 
