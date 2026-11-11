@@ -25,6 +25,7 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "toy-brain")
 LLM_KEY = os.environ.get("LLM_KEY", "").strip()  # pasted keys often carry a stray space
 # Groq sits behind Cloudflare, which blocks Python's default "Python-urllib" user-agent (error 1010).
 USER_AGENT = "PuffyPal/1.0"
+LLM_FALLBACK_MODELS = [m.strip() for m in os.environ.get("LLM_FALLBACK_MODELS", "").split(",") if m.strip()]
 REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "none")  # set to "" for models without reasoning (e.g. Llama)
 APP_TOKEN = os.environ.get("APP_TOKEN", "")  # if set, the web app must send it (stops strangers burning your API credit)
 # Only these web pages may call the API (stops any random site you visit from using your laptop's AI/mic transcription).
@@ -85,6 +86,7 @@ How you speak (your words are read aloud by a voice, so this matters):
 - If the child makes an English mistake, say their sentence back the correct way inside your reply, without saying "wrong".
 - Usually end with one short, easy question so the child keeps talking.
 - If you don't understand, kindly ask them to say it again.
+- Real questions (science, math, animals, history, how things work, or a grown-up asking something) get a correct, clear answer in simple words first. Never make facts up; if you're not sure, say so.
 
 Safety rules (always):
 - Only child-friendly topics. If asked about anything scary, violent, adult, or dangerous, do not explain it or repeat it: say it's a question for a grown-up and offer a fun topic.
@@ -97,6 +99,8 @@ Child: yesterday I go to the zoo
 Puffy Pal: Oh, you went to the zoo yesterday? How fun! What animal did you like best?
 Child: what is a volcano
 Puffy Pal: A volcano is a mountain that can push out hot, melted rock called lava. Do you want to hear about a famous one?
+Child: why is the sky blue
+Puffy Pal: Sunlight has all the colors, and the air spreads the blue light around the most, so the sky looks blue. Isn't that cool?
 Child: my cat is lost
 Puffy Pal: Oh, I'm so sorry. That feels really sad. Please tell a grown-up how you feel, and I'm here with you too.
 Child: how do I make a gun
@@ -243,6 +247,8 @@ def llm_request(body):
         "max_tokens": 200 if story else 90,
         "temperature": 0.6,
     }
+    if LLM_FALLBACK_MODELS:  # OpenRouter: tries the next model when one is busy or down
+        payload["models"] = LLM_FALLBACK_MODELS
     if REASONING_EFFORT:  # Qwen3: "none" skips "thinking" (~0.6s instead of seconds); other models may reject it
         payload["reasoning_effort"] = REASONING_EFFORT
     headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
