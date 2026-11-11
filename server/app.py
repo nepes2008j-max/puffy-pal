@@ -22,7 +22,7 @@ from flask import Flask, Response, jsonify, request
 
 LLM_URL = os.environ.get("LLM_URL", "http://localhost:11434/v1/chat/completions")
 LLM_MODEL = os.environ.get("LLM_MODEL", "toy-brain")
-LLM_KEY = os.environ.get("LLM_KEY", "")
+LLM_KEY = os.environ.get("LLM_KEY", "").strip()  # pasted keys often carry a stray space
 # Groq sits behind Cloudflare, which blocks Python's default "Python-urllib" user-agent (error 1010).
 USER_AGENT = "PuffyPal/1.0"
 REASONING_EFFORT = os.environ.get("REASONING_EFFORT", "none")  # set to "" for models without reasoning (e.g. Llama)
@@ -427,7 +427,7 @@ def decode_capped(data, max_seconds):
 STT_URL = os.environ.get("STT_URL", "")  # cloud Whisper for servers without a GPU, e.g. Groq:
 #                                        https://api.groq.com/openai/v1/audio/transcriptions
 STT_MODEL = os.environ.get("STT_MODEL", "whisper-large-v3-turbo")
-STT_KEY = os.environ.get("STT_KEY", LLM_KEY)
+STT_KEY = os.environ.get("STT_KEY", LLM_KEY).strip()
 
 
 def has_stt():
