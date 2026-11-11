@@ -265,8 +265,9 @@ def chat():
         with urllib.request.urlopen(req, timeout=30) as r:
             reply = clean(json.load(r)["choices"][0]["message"].get("content") or "")
     except Exception as e:  # child should hear something friendly, parent sees the error in logs
-        app.logger.error("LLM error: %s", e)
-        return jsonify(reply="Oops, my brain is taking a nap. Can you try again?", error=str(e)), 502
+        detail = f"{e} {e.read()[:300].decode(errors='replace')}" if hasattr(e, "read") else str(e)  # provider's reason
+        app.logger.error("LLM error: %s", detail)
+        return jsonify(reply="Oops, my brain is taking a nap. Can you try again?", error=detail), 502
     if UNSAFE.search(reply):
         reply = SAFE_REPLY
     return jsonify(reply=short(reply, max_sentences) or "Hmm, can you say that again?")

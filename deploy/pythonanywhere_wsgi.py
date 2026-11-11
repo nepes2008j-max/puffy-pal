@@ -9,8 +9,8 @@ os.environ["LLM_KEY"] = "paste-your-groq-key-here"   # <<< from console.groq.com
 
 # AI brain: Groq (OpenAI-compatible). Qwen3 needs REASONING_EFFORT "none" (no slow "thinking").
 os.environ["LLM_URL"] = "https://api.groq.com/openai/v1/chat/completions"
-os.environ["LLM_MODEL"] = "qwen/qwen3-32b"
-os.environ["REASONING_EFFORT"] = "none"
+os.environ["LLM_MODEL"] = "llama-3.3-70b-versatile"  # Groq retired qwen3-32b
+os.environ["REASONING_EFFORT"] = ""  # Llama has no reasoning setting
 # If Groq says that model doesn't exist, use a fast Llama instead:
 # os.environ["LLM_MODEL"] = "llama-3.1-8b-instant"; os.environ["REASONING_EFFORT"] = ""
 
